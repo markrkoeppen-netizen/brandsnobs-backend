@@ -23,15 +23,16 @@ const ALL_BRANDS = [
 ];
 
 async function searchDealsForBrand(brandName) {
-  // Try the /deals endpoint first
-  const dealsOptions = {
+  // Use the /search endpoint that we know works from testing
+  const searchOptions = {
     method: 'GET',
-    url: `https://${process.env.RAPIDAPI_HOST}/deals`,
+    url: `https://${process.env.RAPIDAPI_HOST}/search`,
     params: {
-      q: `${brandName}`,
+      q: `deals ${brandName} Shoes`,
       country: 'us',
       language: 'en',
-      limit: '20'
+      limit: '20',
+      sort_by: 'BEST_MATCH'
     },
     headers: {
       'X-RapidAPI-Key': process.env.RAPIDAPI_KEY,
@@ -40,66 +41,77 @@ async function searchDealsForBrand(brandName) {
   };
 
   try {
-    console.log(`Searching for ${brandName} deals...`);
-    const response = await axios.request(dealsOptions);
-    console.log(`✅ Fetched ${response.data?.data?.length || 0} deals for ${brandName}`);
-    return response.data?.data || [];
-  } catch (dealsError) {
-    console.error(`❌ /deals endpoint failed for ${brandName}:`, dealsError.response?.status, dealsError.message);
+    console.log(`🔍 Searching for ${brandName}...`);
+    console.log(`API URL: https://${process.env.RAPIDAPI_HOST}/search`);
+    console.log(`Query: deals ${brandName} Shoes`);
     
-    // Fallback to /search endpoint with on_sale filter
-    const searchOptions = {
-      method: 'GET',
-      url: `https://${process.env.RAPIDAPI_HOST}/search`,
-      params: {
-        q: `${brandName}`,
-        country: 'us',
-        language: 'en',
-        limit: '20',
-        sort_by: 'BEST_MATCH',
-        on_sale: 'true'
-      },
-      headers: {
-        'X-RapidAPI-Key': process.env.RAPIDAPI_KEY,
-        'X-RapidAPI-Host': process.env.RAPIDAPI_HOST
-      }
-    };
+    const response = await axios.request(searchOptions);
     
-    try {
-      console.log(`Trying /search endpoint for ${brandName}...`);
-      const searchResponse = await axios.request(searchOptions);
-      console.log(`✅ Fetched ${searchResponse.data?.data?.length || 0} deals for ${brandName}`);
-      return searchResponse.data?.data || [];
-    } catch (searchError) {
-      console.error(`❌ Both endpoints failed for ${brandName}`);
-      console.error('Details:', searchError.response?.status, searchError.response?.data || searchError.message);
-      return [];
-    }
+    console.log(`📊 API Response Status: ${response.status}`);
+    console.log(`📦 Raw data structure:`, JSON.stringify(response.data).substring(0, 200));
+    
+    // Handle different possible response structures
+    const deals = response.data?.data?.products || response.data?.products || response.data?.data || [];
+    
+    console.log(`✅ Found ${deals.length} results for ${brandName}`);
+    
+    return deals;
+  } catch (error) {
+    console.error(`❌ Error fetching deals for ${brandName}:`);
+    console.error(`Status: ${error.response?.status}`);
+    console.error(`Status Text: ${error.response?.statusText}`);
+    console.error(`Error Message: ${error.message}`);
+    console.error(`Response Data:`, error.response?.data);
+    return [];
   }
 }
 
 function normalizeDeals(rawDeals, brandName) {
-  return rawDeals
+  console.log(`🔧 Normalizing ${rawDeals.length} deals for ${brandName}`);
+  
+  const normalized = rawDeals
     .filter(deal => {
       // Filter out invalid deals
-      if (!deal.product_title || !deal.offer?.price) return false;
+      if (!deal.product_title || !deal.offer?.price) {
+        console.log(`⚠️  Skipping deal - missing title or price`);
+        return false;
+      }
       
-      // Must have a price and link
-      if (!deal.product_link) return false;
+      // Must have a link
+      if (!deal.offer?.offer_page_url && !deal.product_page_url) {
+        console.log(`⚠️  Skipping deal - no link`);
+        return false;
+      }
       
       // Filter out extreme prices (likely errors)
-      const price = parseFloat(deal.offer.price);
-      if (price < 1 || price > 10000) return false;
+      const priceStr = deal.offer.price.replace(/[^0-9.]/g, '');
+      const price = parseFloat(priceStr);
+      if (price < 1 || price > 10000) {
+        console.log(`⚠️  Skipping deal - invalid price: ${price}`);
+        return false;
+      }
       
       return true;
     })
     .map(deal => {
-      const currentPrice = parseFloat(deal.offer.price);
-      const originalPrice = deal.offer.original_price 
-        ? parseFloat(deal.offer.original_price) 
-        : currentPrice * 1.3; // Assume 30% discount if no original price
+      const priceStr = deal.offer.price.replace(/[^0-9.]/g, '');
+      const currentPrice = parseFloat(priceStr);
+      
+      let originalPrice = currentPrice;
+      if (deal.offer.original_price) {
+        const origPriceStr = deal.offer.original_price.replace(/[^0-9.]/g, '');
+        originalPrice = parseFloat(origPriceStr);
+      } else {
+        // Assume 30% discount if no original price
+        originalPrice = currentPrice * 1.3;
+      }
       
       const discount = Math.round(((originalPrice - currentPrice) / originalPrice) * 100);
+      
+      // Get first photo
+      const image = deal.product_photos?.[0] || 
+                   deal.product_photo || 
+                   'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=400&h=400&fit=crop';
       
       return {
         brand: brandName,
@@ -107,12 +119,12 @@ function normalizeDeals(rawDeals, brandName) {
         originalPrice: Math.round(originalPrice * 100) / 100,
         salePrice: Math.round(currentPrice * 100) / 100,
         discount: discount > 0 ? `${discount}%` : '0%',
-        image: deal.product_photo || deal.product_photos?.[0] || 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=400&h=400&fit=crop',
-        retailer: deal.offer.store_name || 'Online Store',
-        link: deal.product_link,
+        image: image,
+        retailer: deal.offer?.store_name || 'Online Store',
+        link: deal.offer?.offer_page_url || deal.product_page_url,
         rating: deal.product_rating || null,
         reviewCount: deal.product_num_reviews || null,
-        inStock: deal.offer.on_sale !== false,
+        inStock: deal.offer?.on_sale !== false,
         lastUpdated: new Date().toISOString(),
         fetchedAt: new Date().toISOString()
       };
@@ -120,6 +132,9 @@ function normalizeDeals(rawDeals, brandName) {
     .filter(deal => parseInt(deal.discount) >= 10) // Only keep deals with 10%+ discount
     .sort((a, b) => parseInt(b.discount) - parseInt(a.discount)) // Best deals first
     .slice(0, 15); // Keep top 15 deals per brand
+  
+  console.log(`✅ Normalized to ${normalized.length} quality deals for ${brandName}`);
+  return normalized;
 }
 
 async function storeDealsInFirestore(deals, brandName) {
