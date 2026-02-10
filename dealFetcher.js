@@ -23,16 +23,18 @@ const ALL_BRANDS = [
 ];
 
 async function searchDealsForBrand(brandName) {
-  // Use the correct /deals/deals-v2 endpoint
+  // Use the correct /search-v2 endpoint
   const options = {
     method: 'GET',
-    url: `https://${process.env.RAPIDAPI_HOST}/deals/deals-v2`,
+    url: `https://${process.env.RAPIDAPI_HOST}/search-v2`,
     params: {
-      q: `deals ${brandName} Shoes`,
+      q: `${brandName} shoes`,
       country: 'us',
       language: 'en',
+      page: '1',
       limit: '20',
-      sort_by: 'BEST_MATCH'
+      sort_by: 'BEST_MATCH',
+      product_condition: 'ANY'
     },
     headers: {
       'X-RapidAPI-Key': process.env.RAPIDAPI_KEY,
@@ -42,16 +44,15 @@ async function searchDealsForBrand(brandName) {
 
   try {
     console.log(`🔍 Searching for ${brandName}...`);
-    console.log(`API URL: https://${process.env.RAPIDAPI_HOST}/deals/deals-v2`);
-    console.log(`Query: deals ${brandName} Shoes`);
+    console.log(`API URL: https://${process.env.RAPIDAPI_HOST}/search-v2`);
+    console.log(`Query: ${brandName} shoes`);
     
     const response = await axios.request(options);
     
     console.log(`📊 API Response Status: ${response.status}`);
-    console.log(`📦 Raw data structure:`, JSON.stringify(response.data).substring(0, 200));
     
-    // Handle different possible response structures
-    const deals = response.data?.data?.products || response.data?.products || response.data?.data || [];
+    // Handle the response structure
+    const deals = response.data?.data?.products || [];
     
     console.log(`✅ Found ${deals.length} results for ${brandName}`);
     
@@ -59,9 +60,10 @@ async function searchDealsForBrand(brandName) {
   } catch (error) {
     console.error(`❌ Error fetching deals for ${brandName}:`);
     console.error(`Status: ${error.response?.status}`);
-    console.error(`Status Text: ${error.response?.statusText}`);
     console.error(`Error Message: ${error.message}`);
-    console.error(`Response Data:`, error.response?.data);
+    if (error.response?.data) {
+      console.error(`Response Data:`, error.response.data);
+    }
     return [];
   }
 }
