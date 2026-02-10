@@ -23,10 +23,10 @@ const ALL_BRANDS = [
 ];
 
 async function searchDealsForBrand(brandName) {
-  // Use the /search endpoint that we know works from testing
-  const searchOptions = {
+  // Use the correct /deals/deals-v2 endpoint
+  const options = {
     method: 'GET',
-    url: `https://${process.env.RAPIDAPI_HOST}/search`,
+    url: `https://${process.env.RAPIDAPI_HOST}/deals/deals-v2`,
     params: {
       q: `deals ${brandName} Shoes`,
       country: 'us',
@@ -42,10 +42,10 @@ async function searchDealsForBrand(brandName) {
 
   try {
     console.log(`🔍 Searching for ${brandName}...`);
-    console.log(`API URL: https://${process.env.RAPIDAPI_HOST}/search`);
+    console.log(`API URL: https://${process.env.RAPIDAPI_HOST}/deals/deals-v2`);
     console.log(`Query: deals ${brandName} Shoes`);
     
-    const response = await axios.request(searchOptions);
+    const response = await axios.request(options);
     
     console.log(`📊 API Response Status: ${response.status}`);
     console.log(`📦 Raw data structure:`, JSON.stringify(response.data).substring(0, 200));
