@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Brandsnobs Backend - Manual Trigger</title>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+        }
+        input {
+            width: 100%;
+            padding: 12px;
+            font-size: 16px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-sizing: border-box;
+        }
+        button {
+            width: 100%;
+            padding: 15px;
+            font-size: 16px;
+            font-weight: 600;
+            background: #4F46E5;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        button:hover {
+            background: #4338CA;
+        }
+        button:disabled {
+            background: #9CA3AF;
+            cursor: not-allowed;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 8px;
+            display: none;
+        }
+        .result.success {
+            background: #D1FAE5;
+            border: 2px solid #10B981;
+            color: #065F46;
+            display: block;
+        }
+        .result.error {
+            background: #FEE2E2;
+            border: 2px solid #EF4444;
+            color: #991B1B;
+            display: block;
+        }
+        .result.loading {
+            background: #DBEAFE;
+            border: 2px solid #3B82F6;
+            color: #1E40AF;
+            display: block;
+        }
+        .stats {
+            margin-top: 10px;
+            font-size: 14px;
+        }
+        .code {
+            background: #f3f4f6;
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 14px;
+            display: inline-block;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 Brandsnobs Backend</h1>
+        <p class="subtitle">Manual Deal Fetch Trigger</p>
+        
+        <label for="apiUrl" style="display: block; margin-bottom: 8px; font-weight: 600;">
+            Your Railway Backend URL:
+        </label>
+        <input 
+            type="text" 
+            id="apiUrl" 
+            placeholder="https://brandsnobs-backend-production.up.railway.app"
+            value=""
+        />
+        
+        <button id="fetchButton" onclick="fetchDeals()">
+            Fetch Deals Now
+        </button>
+        
+        <div id="result" class="result"></div>
+    </div>
+
+    <script>
+        // Save URL to localStorage
+        const urlInput = document.getElementById('apiUrl');
+        const savedUrl = localStorage.getItem('backendUrl');
+        if (savedUrl) {
+            urlInput.value = savedUrl;
+        }
+        
+        urlInput.addEventListener('change', () => {
+            localStorage.setItem('backendUrl', urlInput.value);
+        });
+
+        async function fetchDeals() {
+            const apiUrl = document.getElementById('apiUrl').value.trim();
+            const resultDiv = document.getElementById('result');
+            const button = document.getElementById('fetchButton');
+            
+            if (!apiUrl) {
+                resultDiv.className = 'result error';
+                resultDiv.innerHTML = '❌ Please enter your Railway backend URL';
+                return;
+            }
+            
+            // Show loading state
+            button.disabled = true;
+            button.textContent = 'Fetching deals... (this may take 2-5 minutes)';
+            resultDiv.className = 'result loading';
+            resultDiv.innerHTML = '⏳ Fetching deals from RapidAPI... Please wait.';
+            
+            try {
+                const response = await fetch(`${apiUrl}/fetch-deals`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    resultDiv.className = 'result success';
+                    resultDiv.innerHTML = `
+                        ✅ <strong>Success!</strong> Deals fetched and stored in Firestore.
+                        <div class="stats">
+                            <p>📦 Total Deals: <span class="code">${data.totalDeals}</span></p>
+                            <p>✓ Successful Brands: <span class="code">${data.successfulBrands}</span></p>
+                            <p>✗ Failed Brands: <span class="code">${data.failedBrands}</span></p>
+                            <p>⏱️ Duration: <span class="code">${data.duration}</span></p>
+                            <p>🕐 Timestamp: <span class="code">${new Date(data.timestamp).toLocaleString()}</span></p>
+                        </div>
+                        <p style="margin-top: 15px;">
+                            <strong>Next:</strong> Check Firestore Database in Firebase Console to see the deals!
+                        </p>
+                    `;
+                } else {
+                    throw new Error(data.error || 'Unknown error');
+                }
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.innerHTML = `
+                    ❌ <strong>Error:</strong> ${error.message}
+                    <p style="margin-top: 10px; font-size: 14px;">
+                        Common issues:<br>
+                        • Backend URL is incorrect<br>
+                        • Backend is not deployed yet<br>
+                        • Environment variables not set<br>
+                        • Check Railway logs for details
+                    </p>
+                `;
+            } finally {
+                button.disabled = false;
+                button.textContent = 'Fetch Deals Now';
+            }
+        }
+    </script>
+</body>
+</html>
