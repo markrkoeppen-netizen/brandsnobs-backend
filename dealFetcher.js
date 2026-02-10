@@ -5,7 +5,7 @@ const { getFirestore } = require('./firebase');
 const PRIORITY_BRANDS = [
   'Nike', 'Adidas', 'Lululemon', 'Apple', 'Yeti', 
   'The North Face', 'Coach', 'On Running', 'Columbia',
-  'Alo', 'Samsung', 'Sony', 'Vuori', 'Tumi', 'UGG'
+  'Alo', 'Tommy Bahama', 'Sony', 'Vuori', 'Tumi', 'UGG'
 ];
 
 // All brands from your app
