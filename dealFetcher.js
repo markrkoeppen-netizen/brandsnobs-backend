@@ -23,16 +23,15 @@ const ALL_BRANDS = [
 ];
 
 async function searchDealsForBrand(brandName) {
-  const options = {
+  // Try the /deals endpoint first
+  const dealsOptions = {
     method: 'GET',
-    url: 'https://real-time-product-search.p.rapidapi.com/search',
+    url: `https://${process.env.RAPIDAPI_HOST}/deals`,
     params: {
-      q: `${brandName} sale`,
+      q: `${brandName}`,
       country: 'us',
       language: 'en',
-      limit: '20', // Get 20 deals per brand
-      sort_by: 'BEST_MATCH',
-      product_condition: 'ANY'
+      limit: '20'
     },
     headers: {
       'X-RapidAPI-Key': process.env.RAPIDAPI_KEY,
@@ -41,12 +40,41 @@ async function searchDealsForBrand(brandName) {
   };
 
   try {
-    const response = await axios.request(options);
+    console.log(`Searching for ${brandName} deals...`);
+    const response = await axios.request(dealsOptions);
     console.log(`✅ Fetched ${response.data?.data?.length || 0} deals for ${brandName}`);
     return response.data?.data || [];
-  } catch (error) {
-    console.error(`❌ Error fetching deals for ${brandName}:`, error.message);
-    return [];
+  } catch (dealsError) {
+    console.error(`❌ /deals endpoint failed for ${brandName}:`, dealsError.response?.status, dealsError.message);
+    
+    // Fallback to /search endpoint with on_sale filter
+    const searchOptions = {
+      method: 'GET',
+      url: `https://${process.env.RAPIDAPI_HOST}/search`,
+      params: {
+        q: `${brandName}`,
+        country: 'us',
+        language: 'en',
+        limit: '20',
+        sort_by: 'BEST_MATCH',
+        on_sale: 'true'
+      },
+      headers: {
+        'X-RapidAPI-Key': process.env.RAPIDAPI_KEY,
+        'X-RapidAPI-Host': process.env.RAPIDAPI_HOST
+      }
+    };
+    
+    try {
+      console.log(`Trying /search endpoint for ${brandName}...`);
+      const searchResponse = await axios.request(searchOptions);
+      console.log(`✅ Fetched ${searchResponse.data?.data?.length || 0} deals for ${brandName}`);
+      return searchResponse.data?.data || [];
+    } catch (searchError) {
+      console.error(`❌ Both endpoints failed for ${brandName}`);
+      console.error('Details:', searchError.response?.status, searchError.response?.data || searchError.message);
+      return [];
+    }
   }
 }
 
