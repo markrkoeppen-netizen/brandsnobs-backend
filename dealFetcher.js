@@ -28,7 +28,7 @@ async function searchDealsForBrand(brandName) {
     method: 'GET',
     url: `https://${process.env.RAPIDAPI_HOST}/search-v2`,
     params: {
-      q: `${brandName} shoes`,
+      q: `${brandName}`,
       country: 'us',
       language: 'en',
       page: '1',
@@ -45,7 +45,7 @@ async function searchDealsForBrand(brandName) {
   try {
     console.log(`🔍 Searching for ${brandName}...`);
     console.log(`API URL: https://${process.env.RAPIDAPI_HOST}/search-v2`);
-    console.log(`Query: ${brandName} shoes`);
+    console.log(`Query: ${brandName}`);
     
     const response = await axios.request(options);
     
