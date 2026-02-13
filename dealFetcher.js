@@ -32,6 +32,12 @@ async function searchDealsForBrand(brandName) {
     const response = await axios.request(options);
     const deals = response.data?.data?.products || [];
     console.log(`✅ API returned ${deals.length} products for ${brandName}`);
+    
+    // Log first product structure
+    if (deals.length > 0) {
+      console.log(`📋 Sample product structure:`, JSON.stringify(deals[0], null, 2).substring(0, 800));
+    }
+    
     return deals;
   } catch (error) {
     console.error(`❌ Error fetching deals for ${brandName}:`, error.message);
@@ -52,86 +58,67 @@ function normalizeDeals(rawDeals, brandName) {
     return [];
   }
 
-  console.log(`📝 Starting normalization for ${brandName} with ${rawDeals.length} raw deals`);
+  console.log(`📝 Processing ${rawDeals.length} products for ${brandName}`);
   
-  let filtered = 0;
-  let noTitle = 0;
-  let noOffer = 0;
-  let noLink = 0;
-  let badPrice = 0;
-  let lowDiscount = 0;
+  const normalized = rawDeals
+    .filter(deal => {
+      // Must have title
+      if (!deal.product_title) return false;
+      
+      // Must have offer with price
+      if (!deal.offer || !deal.offer.price) return false;
+      
+      // Price must be reasonable
+      const price = parseFloat(deal.offer.price);
+      if (isNaN(price) || price < 1 || price > 10000) return false;
+      
+      // Must have a link somewhere
+      const hasLink = deal.offer.link || deal.offer.product_page_url || deal.product_link;
+      if (!hasLink) return false;
+      
+      return true;
+    })
+    .map(deal => {
+      const currentPrice = parseFloat(deal.offer.price);
+      const originalPrice = deal.offer.original_price 
+        ? parseFloat(deal.offer.original_price) 
+        : currentPrice * 1.3;
+      
+      const discount = Math.round(((originalPrice - currentPrice) / originalPrice) * 100);
+      const uniqueId = createUniqueId(brandName, deal.product_title, currentPrice);
+      
+      // Get link - try multiple field names
+      const productLink = deal.offer.link || deal.offer.product_page_url || deal.product_link || '#';
+      
+      return {
+        id: uniqueId,
+        brand: brandName,
+        product: deal.product_title,
+        originalPrice: Math.round(originalPrice * 100) / 100,
+        salePrice: Math.round(currentPrice * 100) / 100,
+        discount: discount > 0 ? `${discount}%` : '0%',
+        image: deal.product_photo || deal.product_photos?.[0] || 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=400&h=400&fit=crop',
+        retailer: deal.offer.store_name || 'Online Store',
+        link: productLink,
+        rating: deal.product_rating || null,
+        reviewCount: deal.product_num_reviews || null,
+        inStock: deal.offer.on_sale !== false,
+        lastUpdated: new Date().toISOString(),
+        fetchedAt: new Date().toISOString()
+      };
+    })
+    .filter(deal => parseInt(deal.discount) >= 10)
+    .sort((a, b) => parseInt(b.discount) - parseInt(a.discount))
+    .slice(0, 15);
 
-  const filtered1 = rawDeals.filter(deal => {
-    if (!deal.product_title) {
-      noTitle++;
-      return false;
-    }
-    if (!deal.offer?.price) {
-      noOffer++;
-      return false;
-    }
-    if (!deal.product_link) {
-      noLink++;
-      return false;
-    }
-    const price = parseFloat(deal.offer.price);
-    if (price < 1 || price > 10000) {
-      badPrice++;
-      return false;
-    }
-    return true;
-  });
-
-  console.log(`   ✓ After basic filters: ${filtered1.length} (removed: ${noTitle} no-title, ${noOffer} no-offer, ${noLink} no-link, ${badPrice} bad-price)`);
-
-  const normalized = filtered1.map(deal => {
-    const currentPrice = parseFloat(deal.offer.price);
-    const originalPrice = deal.offer.original_price 
-      ? parseFloat(deal.offer.original_price) 
-      : currentPrice * 1.3;
-    
-    const discount = Math.round(((originalPrice - currentPrice) / originalPrice) * 100);
-    const uniqueId = createUniqueId(brandName, deal.product_title, currentPrice);
-    
-    return {
-      id: uniqueId,
-      brand: brandName,
-      product: deal.product_title,
-      originalPrice: Math.round(originalPrice * 100) / 100,
-      salePrice: Math.round(currentPrice * 100) / 100,
-      discount: discount > 0 ? `${discount}%` : '0%',
-      image: deal.product_photo || deal.product_photos?.[0] || 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=400&h=400&fit=crop',
-      retailer: deal.offer.store_name || 'Online Store',
-      link: deal.product_link,
-      rating: deal.product_rating || null,
-      reviewCount: deal.product_num_reviews || null,
-      inStock: deal.offer.on_sale !== false,
-      lastUpdated: new Date().toISOString(),
-      fetchedAt: new Date().toISOString()
-    };
-  });
-
-  const withGoodDiscounts = normalized.filter(deal => {
-    const hasDiscount = parseInt(deal.discount) >= 10;
-    if (!hasDiscount) lowDiscount++;
-    return hasDiscount;
-  });
-
-  console.log(`   ✓ After discount filter (>=10%): ${withGoodDiscounts.length} (removed: ${lowDiscount} low-discount)`);
-
-  const sorted = withGoodDiscounts.sort((a, b) => parseInt(b.discount) - parseInt(a.discount));
-  const final = sorted.slice(0, 15);
-
-  console.log(`   ✓ Final count (top 15): ${final.length}`);
+  console.log(`💎 Found ${normalized.length} valid deals for ${brandName}`);
   
-  return final;
+  return normalized;
 }
 
 async function storeDealsInFirestore(deals, brandName) {
   const db = getFirestore();
   const batch = db.batch();
-  
-  let storedCount = 0;
   
   for (const deal of deals) {
     const dealRef = db.collection('deals').doc(deal.id);
@@ -139,20 +126,17 @@ async function storeDealsInFirestore(deals, brandName) {
       ...deal,
       createdAt: new Date().toISOString()
     });
-    storedCount++;
   }
   
   await batch.commit();
-  console.log(`💾 Stored ${storedCount} deals for ${brandName}`);
+  console.log(`💾 Stored ${deals.length} deals for ${brandName}`);
   
   const brandRef = db.collection('brands').doc(brandName.toLowerCase().replace(/[^a-z0-9]/g, '-'));
   await brandRef.set({
     name: brandName,
-    dealCount: storedCount,
+    dealCount: deals.length,
     lastUpdated: new Date().toISOString()
   }, { merge: true });
-  
-  return storedCount;
 }
 
 async function cleanOldDeals() {
@@ -175,8 +159,6 @@ async function cleanOldDeals() {
   
   await batch.commit();
   console.log(`🗑️  Cleaned ${oldDealsSnapshot.size} old deals`);
-  
-  return oldDealsSnapshot.size;
 }
 
 async function fetchAndStoreDeals() {
@@ -185,7 +167,6 @@ async function fetchAndStoreDeals() {
   
   let totalDeals = 0;
   let successfulBrands = 0;
-  let failedBrands = 0;
   
   await cleanOldDeals();
   
@@ -198,31 +179,26 @@ async function fetchAndStoreDeals() {
         await storeDealsInFirestore(normalizedDeals, brandName);
         totalDeals += normalizedDeals.length;
         successfulBrands++;
-      } else {
-        console.log(`⚠️  No valid deals found for ${brandName} after filtering`);
       }
       
       await new Promise(resolve => setTimeout(resolve, 1000));
       
     } catch (error) {
       console.error(`❌ Failed to process ${brandName}:`, error.message);
-      failedBrands++;
     }
   }
   
   const duration = ((Date.now() - startTime) / 1000).toFixed(2);
   
-  const summary = {
+  console.log(`✅ Completed: ${totalDeals} deals from ${successfulBrands} brands in ${duration}s`);
+  
+  return {
     totalDeals,
     successfulBrands,
-    failedBrands,
+    failedBrands: PRIORITY_BRANDS.length - successfulBrands,
     duration: `${duration}s`,
     timestamp: new Date().toISOString()
   };
-  
-  console.log('✅ Deal fetch completed:', summary);
-  
-  return summary;
 }
 
 module.exports = {
