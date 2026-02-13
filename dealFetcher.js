@@ -7,33 +7,6 @@ const PRIORITY_BRANDS = [
   'Alo', 'Tommy Bahama', 'Sony', 'Vuori', 'Tumi', 'UGG'
 ];
 
-// Gender detection keywords
-const GENDER_KEYWORDS = {
-  women: ['women', 'woman', "women's", 'womens', 'ladies', 'lady', 'her', 'she', 'female', 'girl', 'girls'],
-  men: ['men', 'man', "men's", 'mens', 'male', 'him', 'he', 'boy', 'boys', 'gentleman'],
-  girls: ['girl', 'girls', "girl's", 'daughter', 'toddler girl', 'infant girl'],
-  boys: ['boy', 'boys', "boy's", 'son', 'toddler boy', 'infant boy']
-};
-
-function detectGender(productTitle, brandName) {
-  const text = `${productTitle} ${brandName}`.toLowerCase();
-  
-  // Check for explicit gender keywords
-  for (const [gender, keywords] of Object.entries(GENDER_KEYWORDS)) {
-    if (keywords.some(keyword => text.includes(keyword))) {
-      return gender;
-    }
-  }
-  
-  // Default to unisex for tech, outdoor gear, etc.
-  const unisexBrands = ['Apple', 'Yeti', 'Sony', 'Samsung'];
-  if (unisexBrands.includes(brandName)) {
-    return 'unisex';
-  }
-  
-  return 'unisex';
-}
-
 async function searchDealsForBrand(brandName) {
   const options = {
     method: 'GET',
@@ -64,6 +37,14 @@ async function searchDealsForBrand(brandName) {
   }
 }
 
+function createUniqueId(brandName, productTitle, price) {
+  // Create a consistent, unique ID based on product details (not timestamp)
+  const cleanBrand = brandName.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const cleanProduct = productTitle.toLowerCase().replace(/[^a-z0-9]/g, '').substring(0, 40);
+  const cleanPrice = Math.round(price * 100);
+  return `${cleanBrand}-${cleanProduct}-${cleanPrice}`;
+}
+
 function normalizeDeals(rawDeals, brandName) {
   return rawDeals
     .filter(deal => {
@@ -83,11 +64,8 @@ function normalizeDeals(rawDeals, brandName) {
       
       const discount = Math.round(((originalPrice - currentPrice) / originalPrice) * 100);
       
-      // Detect gender
-      const gender = detectGender(deal.product_title, brandName);
-      
-      // Create unique ID based on product title + price (not timestamp)
-      const uniqueId = `${brandName.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${deal.product_title.toLowerCase().replace(/[^a-z0-9]/g, '-').substring(0, 50)}-${currentPrice}`;
+      // Create unique ID (fixes duplicates)
+      const uniqueId = createUniqueId(brandName, deal.product_title, currentPrice);
       
       return {
         id: uniqueId,
@@ -96,7 +74,6 @@ function normalizeDeals(rawDeals, brandName) {
         originalPrice: Math.round(originalPrice * 100) / 100,
         salePrice: Math.round(currentPrice * 100) / 100,
         discount: discount > 0 ? `${discount}%` : '0%',
-        gender: gender,
         image: deal.product_photo || deal.product_photos?.[0] || 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=400&h=400&fit=crop',
         retailer: deal.offer.store_name || 'Online Store',
         link: deal.product_link,
