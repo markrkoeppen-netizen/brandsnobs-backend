@@ -72,8 +72,8 @@ function normalizeDeals(rawDeals, brandName) {
       const price = parseFloat(deal.offer.price);
       if (isNaN(price) || price < 1 || price > 10000) return false;
       
-      // Must have a link somewhere
-      const hasLink = deal.offer.link || deal.offer.product_page_url || deal.product_link;
+      // Must have a link
+      const hasLink = deal.offer.offer_page_url;
       if (!hasLink) return false;
       
       return true;
@@ -87,8 +87,8 @@ function normalizeDeals(rawDeals, brandName) {
       const discount = Math.round(((originalPrice - currentPrice) / originalPrice) * 100);
       const uniqueId = createUniqueId(brandName, deal.product_title, currentPrice);
       
-      // Get link - try multiple field names
-      const productLink = deal.offer.link || deal.offer.product_page_url || deal.product_link || '#';
+      // Get link from offer
+      const productLink = deal.offer.offer_page_url || '#';
       
       return {
         id: uniqueId,
