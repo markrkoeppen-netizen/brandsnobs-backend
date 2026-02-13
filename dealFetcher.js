@@ -30,18 +30,11 @@ async function searchDealsForBrand(brandName) {
   try {
     console.log(`🔍 Searching for ${brandName}...`);
     const response = await axios.request(options);
-    
-    // The API returns: response.data.data.products
     const deals = response.data?.data?.products || [];
-    console.log(`✅ Found ${deals.length} products in response.data.data.products`);
-    
+    console.log(`✅ API returned ${deals.length} products for ${brandName}`);
     return deals;
   } catch (error) {
     console.error(`❌ Error fetching deals for ${brandName}:`, error.message);
-    if (error.response) {
-      console.error(`   Status: ${error.response.status}`);
-      console.error(`   Data:`, JSON.stringify(error.response.data).substring(0, 500));
-    }
     return [];
   }
 }
@@ -59,45 +52,79 @@ function normalizeDeals(rawDeals, brandName) {
     return [];
   }
 
-  return rawDeals
-    .filter(deal => {
-      if (!deal.product_title || !deal.offer?.price) return false;
-      if (!deal.product_link) return false;
-      
-      const price = parseFloat(deal.offer.price);
-      if (price < 1 || price > 10000) return false;
-      
-      return true;
-    })
-    .map(deal => {
-      const currentPrice = parseFloat(deal.offer.price);
-      const originalPrice = deal.offer.original_price 
-        ? parseFloat(deal.offer.original_price) 
-        : currentPrice * 1.3;
-      
-      const discount = Math.round(((originalPrice - currentPrice) / originalPrice) * 100);
-      const uniqueId = createUniqueId(brandName, deal.product_title, currentPrice);
-      
-      return {
-        id: uniqueId,
-        brand: brandName,
-        product: deal.product_title,
-        originalPrice: Math.round(originalPrice * 100) / 100,
-        salePrice: Math.round(currentPrice * 100) / 100,
-        discount: discount > 0 ? `${discount}%` : '0%',
-        image: deal.product_photo || deal.product_photos?.[0] || 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=400&h=400&fit=crop',
-        retailer: deal.offer.store_name || 'Online Store',
-        link: deal.product_link,
-        rating: deal.product_rating || null,
-        reviewCount: deal.product_num_reviews || null,
-        inStock: deal.offer.on_sale !== false,
-        lastUpdated: new Date().toISOString(),
-        fetchedAt: new Date().toISOString()
-      };
-    })
-    .filter(deal => parseInt(deal.discount) >= 10)
-    .sort((a, b) => parseInt(b.discount) - parseInt(a.discount))
-    .slice(0, 15);
+  console.log(`📝 Starting normalization for ${brandName} with ${rawDeals.length} raw deals`);
+  
+  let filtered = 0;
+  let noTitle = 0;
+  let noOffer = 0;
+  let noLink = 0;
+  let badPrice = 0;
+  let lowDiscount = 0;
+
+  const filtered1 = rawDeals.filter(deal => {
+    if (!deal.product_title) {
+      noTitle++;
+      return false;
+    }
+    if (!deal.offer?.price) {
+      noOffer++;
+      return false;
+    }
+    if (!deal.product_link) {
+      noLink++;
+      return false;
+    }
+    const price = parseFloat(deal.offer.price);
+    if (price < 1 || price > 10000) {
+      badPrice++;
+      return false;
+    }
+    return true;
+  });
+
+  console.log(`   ✓ After basic filters: ${filtered1.length} (removed: ${noTitle} no-title, ${noOffer} no-offer, ${noLink} no-link, ${badPrice} bad-price)`);
+
+  const normalized = filtered1.map(deal => {
+    const currentPrice = parseFloat(deal.offer.price);
+    const originalPrice = deal.offer.original_price 
+      ? parseFloat(deal.offer.original_price) 
+      : currentPrice * 1.3;
+    
+    const discount = Math.round(((originalPrice - currentPrice) / originalPrice) * 100);
+    const uniqueId = createUniqueId(brandName, deal.product_title, currentPrice);
+    
+    return {
+      id: uniqueId,
+      brand: brandName,
+      product: deal.product_title,
+      originalPrice: Math.round(originalPrice * 100) / 100,
+      salePrice: Math.round(currentPrice * 100) / 100,
+      discount: discount > 0 ? `${discount}%` : '0%',
+      image: deal.product_photo || deal.product_photos?.[0] || 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=400&h=400&fit=crop',
+      retailer: deal.offer.store_name || 'Online Store',
+      link: deal.product_link,
+      rating: deal.product_rating || null,
+      reviewCount: deal.product_num_reviews || null,
+      inStock: deal.offer.on_sale !== false,
+      lastUpdated: new Date().toISOString(),
+      fetchedAt: new Date().toISOString()
+    };
+  });
+
+  const withGoodDiscounts = normalized.filter(deal => {
+    const hasDiscount = parseInt(deal.discount) >= 10;
+    if (!hasDiscount) lowDiscount++;
+    return hasDiscount;
+  });
+
+  console.log(`   ✓ After discount filter (>=10%): ${withGoodDiscounts.length} (removed: ${lowDiscount} low-discount)`);
+
+  const sorted = withGoodDiscounts.sort((a, b) => parseInt(b.discount) - parseInt(a.discount));
+  const final = sorted.slice(0, 15);
+
+  console.log(`   ✓ Final count (top 15): ${final.length}`);
+  
+  return final;
 }
 
 async function storeDealsInFirestore(deals, brandName) {
@@ -108,12 +135,10 @@ async function storeDealsInFirestore(deals, brandName) {
   
   for (const deal of deals) {
     const dealRef = db.collection('deals').doc(deal.id);
-    
     batch.set(dealRef, {
       ...deal,
       createdAt: new Date().toISOString()
     });
-    
     storedCount++;
   }
   
@@ -174,7 +199,7 @@ async function fetchAndStoreDeals() {
         totalDeals += normalizedDeals.length;
         successfulBrands++;
       } else {
-        console.log(`⚠️  No valid deals found for ${brandName}`);
+        console.log(`⚠️  No valid deals found for ${brandName} after filtering`);
       }
       
       await new Promise(resolve => setTimeout(resolve, 1000));
