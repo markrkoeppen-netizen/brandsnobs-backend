@@ -18,11 +18,12 @@ async function searchDealsForBrand(brandName) {
       page: '1',
       limit: '20',
       sort_by: 'BEST_MATCH',
-      product_condition: 'ANY'
+      product_condition: 'ANY',
+      return_filters: 'true'  // ADDED THIS
     },
     headers: {
-      'X-RapidAPI-Key': process.env.RAPIDAPI_KEY,
-      'X-RapidAPI-Host': process.env.RAPIDAPI_HOST
+      'x-rapidapi-host': process.env.RAPIDAPI_HOST,  // Changed to lowercase
+      'x-rapidapi-key': process.env.RAPIDAPI_KEY     // Changed to lowercase
     }
   };
 
@@ -30,20 +31,8 @@ async function searchDealsForBrand(brandName) {
     console.log(`🔍 Searching for ${brandName}...`);
     const response = await axios.request(options);
     
-    // Debug: Log the response structure
-    console.log(`📊 Response structure:`, typeof response.data, Object.keys(response.data || {}));
-    
-    // Handle different possible response structures
-    let deals = [];
-    if (Array.isArray(response.data)) {
-      deals = response.data;
-    } else if (response.data?.data && Array.isArray(response.data.data)) {
-      deals = response.data.data;
-    } else if (response.data?.products && Array.isArray(response.data.products)) {
-      deals = response.data.products;
-    } else if (response.data?.results && Array.isArray(response.data.results)) {
-      deals = response.data.results;
-    }
+    // The API returns data in response.data.data
+    const deals = response.data?.data || [];
     
     console.log(`✅ Fetched ${deals.length} results for ${brandName}`);
     return deals;
@@ -51,7 +40,7 @@ async function searchDealsForBrand(brandName) {
     console.error(`❌ Error fetching deals for ${brandName}:`, error.message);
     if (error.response) {
       console.error(`   Status: ${error.response.status}`);
-      console.error(`   Data:`, error.response.data);
+      console.error(`   Error: ${error.response.data?.message || error.response.data}`);
     }
     return [];
   }
@@ -65,9 +54,8 @@ function createUniqueId(brandName, productTitle, price) {
 }
 
 function normalizeDeals(rawDeals, brandName) {
-  // Ensure rawDeals is an array
   if (!Array.isArray(rawDeals)) {
-    console.error(`⚠️  rawDeals is not an array for ${brandName}:`, typeof rawDeals);
+    console.error(`⚠️  rawDeals is not an array for ${brandName}`);
     return [];
   }
 
