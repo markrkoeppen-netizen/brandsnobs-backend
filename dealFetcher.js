@@ -1,29 +1,40 @@
 const axios = require('axios');
 const { getFirestore } = require('./firebase');
 
-// Priority brands to fetch first (based on your current app)
 const PRIORITY_BRANDS = [
   'Nike', 'Adidas', 'Lululemon', 'Apple', 'Yeti', 
   'The North Face', 'Coach', 'On Running', 'Columbia',
   'Alo', 'Tommy Bahama', 'Sony', 'Vuori', 'Tumi', 'UGG'
 ];
 
-// All brands from your app
-const ALL_BRANDS = [
-  'Abercrombie & Fitch', 'Adidas', 'Allbirds', 'Alo', 'Apple',
-  'Birkenstock', 'Bombas', 'Brooks Brothers', 'Burberry', 'Burlebo',
-  'Chubbies', 'Columbia', 'Cole Haan', 'Costa', 'Crocs',
-  'Dolce & Gabbana', 'Gap', 'Kendra Scott', 'Lush', 'Nike',
-  'Oakley', 'Omega', 'On Running', 'Poncho', 'Ray-Ban',
-  'Restoration Hardware', 'Rhone', 'Rolex', 'Samsung', 'Sony',
-  'Sun Bum', 'Tag Heuer', 'The North Face', 'TravisMatthew', 'Tommy Bahama',
-  'Tumi', 'Ugg', 'Vera Wang', 'Vineyard Vines', 'Vuori',
-  'Yeti', 'Montblanc', 'Madewell', 'J.Crew', 'Spanx',
-  'Lululemon', 'Coach', 'Lucchese', 'Young LA', 'Baseball 101'
-];
+// Gender detection keywords
+const GENDER_KEYWORDS = {
+  women: ['women', 'woman', "women's", 'womens', 'ladies', 'lady', 'her', 'she', 'female', 'girl', 'girls'],
+  men: ['men', 'man', "men's", 'mens', 'male', 'him', 'he', 'boy', 'boys', 'gentleman'],
+  girls: ['girl', 'girls', "girl's", 'daughter', 'toddler girl', 'infant girl'],
+  boys: ['boy', 'boys', "boy's", 'son', 'toddler boy', 'infant boy']
+};
+
+function detectGender(productTitle, brandName) {
+  const text = `${productTitle} ${brandName}`.toLowerCase();
+  
+  // Check for explicit gender keywords
+  for (const [gender, keywords] of Object.entries(GENDER_KEYWORDS)) {
+    if (keywords.some(keyword => text.includes(keyword))) {
+      return gender;
+    }
+  }
+  
+  // Default to unisex for tech, outdoor gear, etc.
+  const unisexBrands = ['Apple', 'Yeti', 'Sony', 'Samsung'];
+  if (unisexBrands.includes(brandName)) {
+    return 'unisex';
+  }
+  
+  return 'unisex';
+}
 
 async function searchDealsForBrand(brandName) {
-  // Use the correct /search-v2 endpoint
   const options = {
     method: 'GET',
     url: `https://${process.env.RAPIDAPI_HOST}/search-v2`,
@@ -44,99 +55,61 @@ async function searchDealsForBrand(brandName) {
 
   try {
     console.log(`🔍 Searching for ${brandName}...`);
-    console.log(`API URL: https://${process.env.RAPIDAPI_HOST}/search-v2`);
-    console.log(`Query: ${brandName}`);
-    
     const response = await axios.request(options);
-    
-    console.log(`📊 API Response Status: ${response.status}`);
-    
-    // Handle the response structure
-    const deals = response.data?.data?.products || [];
-    
-    console.log(`✅ Found ${deals.length} results for ${brandName}`);
-    
-    return deals;
+    console.log(`✅ Fetched ${response.data?.data?.length || 0} results for ${brandName}`);
+    return response.data?.data || [];
   } catch (error) {
-    console.error(`❌ Error fetching deals for ${brandName}:`);
-    console.error(`Status: ${error.response?.status}`);
-    console.error(`Error Message: ${error.message}`);
-    if (error.response?.data) {
-      console.error(`Response Data:`, error.response.data);
-    }
+    console.error(`❌ Error fetching deals for ${brandName}:`, error.message);
     return [];
   }
 }
 
 function normalizeDeals(rawDeals, brandName) {
-  console.log(`🔧 Normalizing ${rawDeals.length} deals for ${brandName}`);
-  
-  const normalized = rawDeals
+  return rawDeals
     .filter(deal => {
-      // Filter out invalid deals
-      if (!deal.product_title || !deal.offer?.price) {
-        console.log(`⚠️  Skipping deal - missing title or price`);
-        return false;
-      }
+      if (!deal.product_title || !deal.offer?.price) return false;
+      if (!deal.product_link) return false;
       
-      // Must have a link
-      if (!deal.offer?.offer_page_url && !deal.product_page_url) {
-        console.log(`⚠️  Skipping deal - no link`);
-        return false;
-      }
-      
-      // Filter out extreme prices (likely errors)
-      const priceStr = deal.offer.price.replace(/[^0-9.]/g, '');
-      const price = parseFloat(priceStr);
-      if (price < 1 || price > 10000) {
-        console.log(`⚠️  Skipping deal - invalid price: ${price}`);
-        return false;
-      }
+      const price = parseFloat(deal.offer.price);
+      if (price < 1 || price > 10000) return false;
       
       return true;
     })
     .map(deal => {
-      const priceStr = deal.offer.price.replace(/[^0-9.]/g, '');
-      const currentPrice = parseFloat(priceStr);
-      
-      let originalPrice = currentPrice;
-      if (deal.offer.original_price) {
-        const origPriceStr = deal.offer.original_price.replace(/[^0-9.]/g, '');
-        originalPrice = parseFloat(origPriceStr);
-      } else {
-        // Assume 30% discount if no original price
-        originalPrice = currentPrice * 1.3;
-      }
+      const currentPrice = parseFloat(deal.offer.price);
+      const originalPrice = deal.offer.original_price 
+        ? parseFloat(deal.offer.original_price) 
+        : currentPrice * 1.3;
       
       const discount = Math.round(((originalPrice - currentPrice) / originalPrice) * 100);
       
-      // Get first photo
-      const image = deal.product_photos?.[0] || 
-                   deal.product_photo || 
-                   'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=400&h=400&fit=crop';
+      // Detect gender
+      const gender = detectGender(deal.product_title, brandName);
+      
+      // Create unique ID based on product title + price (not timestamp)
+      const uniqueId = `${brandName.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${deal.product_title.toLowerCase().replace(/[^a-z0-9]/g, '-').substring(0, 50)}-${currentPrice}`;
       
       return {
+        id: uniqueId,
         brand: brandName,
         product: deal.product_title,
         originalPrice: Math.round(originalPrice * 100) / 100,
         salePrice: Math.round(currentPrice * 100) / 100,
         discount: discount > 0 ? `${discount}%` : '0%',
-        image: image,
-        retailer: deal.offer?.store_name || 'Online Store',
-        link: deal.offer?.offer_page_url || deal.product_page_url,
+        gender: gender,
+        image: deal.product_photo || deal.product_photos?.[0] || 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=400&h=400&fit=crop',
+        retailer: deal.offer.store_name || 'Online Store',
+        link: deal.product_link,
         rating: deal.product_rating || null,
         reviewCount: deal.product_num_reviews || null,
-        inStock: deal.offer?.on_sale !== false,
+        inStock: deal.offer.on_sale !== false,
         lastUpdated: new Date().toISOString(),
         fetchedAt: new Date().toISOString()
       };
     })
-    .filter(deal => parseInt(deal.discount) >= 10) // Only keep deals with 10%+ discount
-    .sort((a, b) => parseInt(b.discount) - parseInt(a.discount)) // Best deals first
-    .slice(0, 15); // Keep top 15 deals per brand
-  
-  console.log(`✅ Normalized to ${normalized.length} quality deals for ${brandName}`);
-  return normalized;
+    .filter(deal => parseInt(deal.discount) >= 10)
+    .sort((a, b) => parseInt(b.discount) - parseInt(a.discount))
+    .slice(0, 15);
 }
 
 async function storeDealsInFirestore(deals, brandName) {
@@ -146,24 +119,19 @@ async function storeDealsInFirestore(deals, brandName) {
   let storedCount = 0;
   
   for (const deal of deals) {
-    const dealId = `${brandName.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${Date.now()}-${storedCount}`;
-    const dealRef = db.collection('deals').doc(dealId);
+    const dealRef = db.collection('deals').doc(deal.id);
     
     batch.set(dealRef, {
       ...deal,
-      id: dealId,
       createdAt: new Date().toISOString()
     });
     
     storedCount++;
   }
   
-  // Commit the batch
   await batch.commit();
-  
   console.log(`💾 Stored ${storedCount} deals for ${brandName}`);
   
-  // Update brand metadata
   const brandRef = db.collection('brands').doc(brandName.toLowerCase().replace(/[^a-z0-9]/g, '-'));
   await brandRef.set({
     name: brandName,
@@ -176,8 +144,6 @@ async function storeDealsInFirestore(deals, brandName) {
 
 async function cleanOldDeals() {
   const db = getFirestore();
-  
-  // Delete deals older than 24 hours
   const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
   
   const oldDealsSnapshot = await db.collection('deals')
@@ -208,10 +174,8 @@ async function fetchAndStoreDeals() {
   let successfulBrands = 0;
   let failedBrands = 0;
   
-  // Clean old deals first
   await cleanOldDeals();
   
-  // Fetch priority brands first
   for (const brandName of PRIORITY_BRANDS) {
     try {
       const rawDeals = await searchDealsForBrand(brandName);
@@ -225,7 +189,6 @@ async function fetchAndStoreDeals() {
         console.log(`⚠️  No valid deals found for ${brandName}`);
       }
       
-      // Rate limiting: wait 1 second between requests
       await new Promise(resolve => setTimeout(resolve, 1000));
       
     } catch (error) {
