@@ -12,14 +12,13 @@ async function searchDealsForBrand(brandName) {
     method: 'GET',
     url: `https://${process.env.RAPIDAPI_HOST}/search-v2`,
     params: {
-      q: `${brandName}`,
+      q: brandName,
       country: 'us',
       language: 'en',
       page: '1',
       limit: '20',
       sort_by: 'BEST_MATCH',
-      product_condition: 'ANY',
-      return_filters: 'true'
+      product_condition: 'ANY'
     },
     headers: {
       'x-rapidapi-host': process.env.RAPIDAPI_HOST,
@@ -28,110 +27,96 @@ async function searchDealsForBrand(brandName) {
   };
 
   try {
-    console.log(`🔍 Searching for ${brandName}...`);
+    console.log(`🔍 Fetching ${brandName}...`);
     const response = await axios.request(options);
-    const deals = response.data?.data?.products || [];
-    console.log(`✅ API returned ${deals.length} products for ${brandName}`);
-    
-    // Log first product structure
-    if (deals.length > 0) {
-      console.log(`📋 Sample product structure:`, JSON.stringify(deals[0], null, 2).substring(0, 800));
-    }
-    
-    return deals;
+    const products = response.data?.data?.products || [];
+    console.log(`   Found ${products.length} products`);
+    return products;
   } catch (error) {
-    console.error(`❌ Error fetching deals for ${brandName}:`, error.message);
+    console.error(`   ERROR: ${error.message}`);
     return [];
   }
 }
 
-function createUniqueId(brandName, productTitle, price) {
-  const cleanBrand = brandName.toLowerCase().replace(/[^a-z0-9]/g, '');
-  const cleanProduct = productTitle.toLowerCase().replace(/[^a-z0-9]/g, '').substring(0, 40);
-  const cleanPrice = Math.round(price * 100);
-  return `${cleanBrand}-${cleanProduct}-${cleanPrice}`;
+function parsePrice(priceString) {
+  if (!priceString) return null;
+  // Remove $, commas, and convert to number
+  const cleaned = String(priceString).replace(/[$,]/g, '');
+  const num = parseFloat(cleaned);
+  return isNaN(num) ? null : num;
 }
 
-function normalizeDeals(rawDeals, brandName) {
-  if (!Array.isArray(rawDeals)) {
-    console.error(`⚠️  rawDeals is not an array for ${brandName}`);
-    return [];
+function normalizeDeals(products, brandName) {
+  console.log(`📝 Normalizing ${products.length} products for ${brandName}...`);
+  
+  const deals = [];
+  
+  for (const product of products) {
+    // Skip if missing required fields
+    if (!product.product_title) continue;
+    if (!product.offer) continue;
+    
+    const currentPrice = parsePrice(product.offer.price);
+    if (!currentPrice || currentPrice < 1) continue;
+    
+    const link = product.offer.offer_page_url || product.product_page_url;
+    if (!link) continue;
+    
+    // Calculate discount
+    const originalPrice = parsePrice(product.offer.original_price) || currentPrice * 1.25;
+    const savings = originalPrice - currentPrice;
+    const discountPercent = Math.round((savings / originalPrice) * 100);
+    
+    // Only keep deals with at least 10% off
+    if (discountPercent < 10) continue;
+    
+    // Create unique ID
+    const cleanBrand = brandName.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const cleanTitle = product.product_title.toLowerCase().replace(/[^a-z0-9]/g, '').substring(0, 40);
+    const uniqueId = `${cleanBrand}-${cleanTitle}-${Math.round(currentPrice * 100)}`;
+    
+    deals.push({
+      id: uniqueId,
+      brand: brandName,
+      product: product.product_title,
+      salePrice: Math.round(currentPrice * 100) / 100,
+      originalPrice: Math.round(originalPrice * 100) / 100,
+      discount: `${discountPercent}%`,
+      link: link,
+      image: product.product_photos?.[0] || 'https://images.unsplash.com/photo-1523275335684-37898b6baf30',
+      retailer: product.offer.store_name || 'Online',
+      rating: product.product_rating || null,
+      reviewCount: product.product_num_reviews || null,
+      lastUpdated: new Date().toISOString(),
+      fetchedAt: new Date().toISOString()
+    });
   }
-
-  console.log(`📝 Processing ${rawDeals.length} products for ${brandName}`);
   
-  const normalized = rawDeals
-    .filter(deal => {
-      // Must have title
-      if (!deal.product_title) return false;
-      
-      // Must have offer with price
-      if (!deal.offer || !deal.offer.price) return false;
-      
-      // Price must be reasonable
-      const price = parseFloat(deal.offer.price);
-      if (isNaN(price) || price < 1 || price > 10000) return false;
-      
-      // Must have a link
-      const hasLink = deal.offer.offer_page_url;
-      if (!hasLink) return false;
-      
-      return true;
-    })
-    .map(deal => {
-      const currentPrice = parseFloat(deal.offer.price);
-      const originalPrice = deal.offer.original_price 
-        ? parseFloat(deal.offer.original_price) 
-        : currentPrice * 1.3;
-      
-      const discount = Math.round(((originalPrice - currentPrice) / originalPrice) * 100);
-      const uniqueId = createUniqueId(brandName, deal.product_title, currentPrice);
-      
-      // Get link from offer
-      const productLink = deal.offer.offer_page_url || '#';
-      
-      return {
-        id: uniqueId,
-        brand: brandName,
-        product: deal.product_title,
-        originalPrice: Math.round(originalPrice * 100) / 100,
-        salePrice: Math.round(currentPrice * 100) / 100,
-        discount: discount > 0 ? `${discount}%` : '0%',
-        image: deal.product_photo || deal.product_photos?.[0] || 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=400&h=400&fit=crop',
-        retailer: deal.offer.store_name || 'Online Store',
-        link: productLink,
-        rating: deal.product_rating || null,
-        reviewCount: deal.product_num_reviews || null,
-        inStock: deal.offer.on_sale !== false,
-        lastUpdated: new Date().toISOString(),
-        fetchedAt: new Date().toISOString()
-      };
-    })
-    .filter(deal => parseInt(deal.discount) >= 10)
-    .sort((a, b) => parseInt(b.discount) - parseInt(a.discount))
-    .slice(0, 15);
-
-  console.log(`💎 Found ${normalized.length} valid deals for ${brandName}`);
+  // Sort by discount and take top 15
+  deals.sort((a, b) => parseInt(b.discount) - parseInt(a.discount));
+  const topDeals = deals.slice(0, 15);
   
-  return normalized;
+  console.log(`   ✅ ${topDeals.length} valid deals (${discountPercent >= 10 ? 'with 10%+ discount' : ''})`);
+  
+  return topDeals;
 }
 
 async function storeDealsInFirestore(deals, brandName) {
+  if (deals.length === 0) return;
+  
   const db = getFirestore();
   const batch = db.batch();
   
   for (const deal of deals) {
     const dealRef = db.collection('deals').doc(deal.id);
-    batch.set(dealRef, {
-      ...deal,
-      createdAt: new Date().toISOString()
-    });
+    batch.set(dealRef, deal);
   }
   
   await batch.commit();
   console.log(`💾 Stored ${deals.length} deals for ${brandName}`);
   
-  const brandRef = db.collection('brands').doc(brandName.toLowerCase().replace(/[^a-z0-9]/g, '-'));
+  // Update brand metadata
+  const brandRef = db.collection('brands').doc(brandName.toLowerCase().replace(/\s+/g, '-'));
   await brandRef.set({
     name: brandName,
     dealCount: deals.length,
@@ -143,54 +128,64 @@ async function cleanOldDeals() {
   const db = getFirestore();
   const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
   
-  const oldDealsSnapshot = await db.collection('deals')
-    .where('fetchedAt', '<', oneDayAgo)
-    .get();
-  
-  if (oldDealsSnapshot.empty) {
-    console.log('No old deals to clean');
-    return 0;
+  try {
+    const oldDeals = await db.collection('deals')
+      .where('fetchedAt', '<', oneDayAgo)
+      .get();
+    
+    if (oldDeals.empty) {
+      console.log('🗑️  No old deals to clean');
+      return;
+    }
+    
+    const batch = db.batch();
+    oldDeals.docs.forEach(doc => batch.delete(doc.ref));
+    await batch.commit();
+    
+    console.log(`🗑️  Cleaned ${oldDeals.size} old deals`);
+  } catch (error) {
+    console.log('⚠️  Could not clean old deals:', error.message);
   }
-  
-  const batch = db.batch();
-  oldDealsSnapshot.docs.forEach(doc => {
-    batch.delete(doc.ref);
-  });
-  
-  await batch.commit();
-  console.log(`🗑️  Cleaned ${oldDealsSnapshot.size} old deals`);
 }
 
 async function fetchAndStoreDeals() {
-  console.log('🔄 Starting deal fetch process...');
+  console.log('🚀 Starting deal fetch...\n');
   const startTime = Date.now();
+  
+  await cleanOldDeals();
+  console.log('');
   
   let totalDeals = 0;
   let successfulBrands = 0;
   
-  await cleanOldDeals();
-  
   for (const brandName of PRIORITY_BRANDS) {
     try {
-      const rawDeals = await searchDealsForBrand(brandName);
-      const normalizedDeals = normalizeDeals(rawDeals, brandName);
+      const products = await searchDealsForBrand(brandName);
+      const deals = normalizeDeals(products, brandName);
       
-      if (normalizedDeals.length > 0) {
-        await storeDealsInFirestore(normalizedDeals, brandName);
-        totalDeals += normalizedDeals.length;
+      if (deals.length > 0) {
+        await storeDealsInFirestore(deals, brandName);
+        totalDeals += deals.length;
         successfulBrands++;
       }
       
+      // Rate limit - wait 1 second between requests
       await new Promise(resolve => setTimeout(resolve, 1000));
+      console.log('');
       
     } catch (error) {
-      console.error(`❌ Failed to process ${brandName}:`, error.message);
+      console.error(`❌ Failed: ${brandName} - ${error.message}\n`);
     }
   }
   
-  const duration = ((Date.now() - startTime) / 1000).toFixed(2);
+  const duration = ((Date.now() - startTime) / 1000).toFixed(1);
   
-  console.log(`✅ Completed: ${totalDeals} deals from ${successfulBrands} brands in ${duration}s`);
+  console.log('='.repeat(50));
+  console.log(`✅ COMPLETE`);
+  console.log(`   Deals: ${totalDeals}`);
+  console.log(`   Brands: ${successfulBrands}/${PRIORITY_BRANDS.length}`);
+  console.log(`   Time: ${duration}s`);
+  console.log('='.repeat(50));
   
   return {
     totalDeals,
