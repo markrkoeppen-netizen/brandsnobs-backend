@@ -7,33 +7,6 @@ const PRIORITY_BRANDS = [
   'Alo', 'Tommy Bahama', 'Sony', 'Vuori', 'Tumi', 'UGG'
 ];
 
-// Gender detection keywords
-const GENDER_KEYWORDS = {
-  women: ['women', 'woman', "women's", 'womens', 'ladies', 'lady', 'her', 'she', 'female', 'girl', 'girls'],
-  men: ['men', 'man', "men's", 'mens', 'male', 'him', 'he', 'boy', 'boys', 'gentleman'],
-  girls: ['girl', 'girls', "girl's", 'daughter', 'toddler girl', 'infant girl'],
-  boys: ['boy', 'boys', "boy's", 'son', 'toddler boy', 'infant boy']
-};
-
-function detectGender(productTitle, brandName) {
-  const text = `${productTitle} ${brandName}`.toLowerCase();
-  
-  // Check for explicit gender keywords
-  for (const [gender, keywords] of Object.entries(GENDER_KEYWORDS)) {
-    if (keywords.some(keyword => text.includes(keyword))) {
-      return gender;
-    }
-  }
-  
-  // Default to unisex for tech, outdoor gear, etc.
-  const unisexBrands = ['Apple', 'Yeti', 'Sony', 'Samsung'];
-  if (unisexBrands.includes(brandName)) {
-    return 'unisex';
-  }
-  
-  return 'unisex';
-}
-
 async function searchDealsForBrand(brandName) {
   const options = {
     method: 'GET',
@@ -56,15 +29,48 @@ async function searchDealsForBrand(brandName) {
   try {
     console.log(`🔍 Searching for ${brandName}...`);
     const response = await axios.request(options);
-    console.log(`✅ Fetched ${response.data?.data?.length || 0} results for ${brandName}`);
-    return response.data?.data || [];
+    
+    // Debug: Log the response structure
+    console.log(`📊 Response structure:`, typeof response.data, Object.keys(response.data || {}));
+    
+    // Handle different possible response structures
+    let deals = [];
+    if (Array.isArray(response.data)) {
+      deals = response.data;
+    } else if (response.data?.data && Array.isArray(response.data.data)) {
+      deals = response.data.data;
+    } else if (response.data?.products && Array.isArray(response.data.products)) {
+      deals = response.data.products;
+    } else if (response.data?.results && Array.isArray(response.data.results)) {
+      deals = response.data.results;
+    }
+    
+    console.log(`✅ Fetched ${deals.length} results for ${brandName}`);
+    return deals;
   } catch (error) {
     console.error(`❌ Error fetching deals for ${brandName}:`, error.message);
+    if (error.response) {
+      console.error(`   Status: ${error.response.status}`);
+      console.error(`   Data:`, error.response.data);
+    }
     return [];
   }
 }
 
+function createUniqueId(brandName, productTitle, price) {
+  const cleanBrand = brandName.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const cleanProduct = productTitle.toLowerCase().replace(/[^a-z0-9]/g, '').substring(0, 40);
+  const cleanPrice = Math.round(price * 100);
+  return `${cleanBrand}-${cleanProduct}-${cleanPrice}`;
+}
+
 function normalizeDeals(rawDeals, brandName) {
+  // Ensure rawDeals is an array
+  if (!Array.isArray(rawDeals)) {
+    console.error(`⚠️  rawDeals is not an array for ${brandName}:`, typeof rawDeals);
+    return [];
+  }
+
   return rawDeals
     .filter(deal => {
       if (!deal.product_title || !deal.offer?.price) return false;
@@ -82,12 +88,7 @@ function normalizeDeals(rawDeals, brandName) {
         : currentPrice * 1.3;
       
       const discount = Math.round(((originalPrice - currentPrice) / originalPrice) * 100);
-      
-      // Detect gender
-      const gender = detectGender(deal.product_title, brandName);
-      
-      // Create unique ID based on product title + price (not timestamp)
-      const uniqueId = `${brandName.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${deal.product_title.toLowerCase().replace(/[^a-z0-9]/g, '-').substring(0, 50)}-${currentPrice}`;
+      const uniqueId = createUniqueId(brandName, deal.product_title, currentPrice);
       
       return {
         id: uniqueId,
@@ -96,7 +97,6 @@ function normalizeDeals(rawDeals, brandName) {
         originalPrice: Math.round(originalPrice * 100) / 100,
         salePrice: Math.round(currentPrice * 100) / 100,
         discount: discount > 0 ? `${discount}%` : '0%',
-        gender: gender,
         image: deal.product_photo || deal.product_photos?.[0] || 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=400&h=400&fit=crop',
         retailer: deal.offer.store_name || 'Online Store',
         link: deal.product_link,
