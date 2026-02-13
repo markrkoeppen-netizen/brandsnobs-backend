@@ -46,6 +46,23 @@ function parsePrice(priceString) {
   return isNaN(num) ? null : num;
 }
 
+function detectGender(productTitle) {
+  const title = productTitle.toLowerCase();
+  
+  // Check for explicit gender keywords
+  if (title.includes("women's") || title.includes('womens') || title.includes('ladies')) return 'women';
+  if (title.includes("men's") || title.includes('mens')) return 'men';
+  if (title.includes("girls'") || title.includes('girls')) return 'girls';
+  if (title.includes("boys'") || title.includes('boys')) return 'boys';
+  
+  // Check for gendered product types
+  if (title.includes('bra') || title.includes('dress') || title.includes('skirt') || title.includes('blouse')) return 'women';
+  if (title.includes('beard') || title.includes('tie')) return 'men';
+  
+  // Default to unisex if can't determine
+  return 'unisex';
+}
+
 function normalizeDeals(products, brandName) {
   console.log(`📝 Normalizing ${products.length} products for ${brandName}...`);
   
@@ -87,6 +104,7 @@ function normalizeDeals(products, brandName) {
       retailer: product.offer.store_name || 'Online',
       rating: product.product_rating || null,
       reviewCount: product.product_num_reviews || null,
+      gender: detectGender(product.product_title),
       lastUpdated: new Date().toISOString(),
       fetchedAt: new Date().toISOString()
     });
