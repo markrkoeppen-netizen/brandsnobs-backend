@@ -19,11 +19,11 @@ async function searchDealsForBrand(brandName) {
       limit: '20',
       sort_by: 'BEST_MATCH',
       product_condition: 'ANY',
-      return_filters: 'true'  // ADDED THIS
+      return_filters: 'true'
     },
     headers: {
-      'x-rapidapi-host': process.env.RAPIDAPI_HOST,  // Changed to lowercase
-      'x-rapidapi-key': process.env.RAPIDAPI_KEY     // Changed to lowercase
+      'x-rapidapi-host': process.env.RAPIDAPI_HOST,
+      'x-rapidapi-key': process.env.RAPIDAPI_KEY
     }
   };
 
@@ -31,8 +31,29 @@ async function searchDealsForBrand(brandName) {
     console.log(`🔍 Searching for ${brandName}...`);
     const response = await axios.request(options);
     
-    // The API returns data in response.data.data
-    const deals = response.data?.data || [];
+    // DEBUG: Log the full response structure
+    console.log(`📊 Response status: ${response.status}`);
+    console.log(`📊 Response data type: ${typeof response.data}`);
+    console.log(`📊 Response data keys:`, Object.keys(response.data || {}));
+    console.log(`📊 Full response data:`, JSON.stringify(response.data).substring(0, 500));
+    
+    // Try different possible data locations
+    let deals = [];
+    if (Array.isArray(response.data)) {
+      deals = response.data;
+      console.log(`✅ Found deals in response.data (array)`);
+    } else if (response.data?.data && Array.isArray(response.data.data)) {
+      deals = response.data.data;
+      console.log(`✅ Found deals in response.data.data`);
+    } else if (response.data?.products && Array.isArray(response.data.products)) {
+      deals = response.data.products;
+      console.log(`✅ Found deals in response.data.products`);
+    } else if (response.data?.results && Array.isArray(response.data.results)) {
+      deals = response.data.results;
+      console.log(`✅ Found deals in response.data.results`);
+    } else {
+      console.log(`⚠️  Could not find deals array in response`);
+    }
     
     console.log(`✅ Fetched ${deals.length} results for ${brandName}`);
     return deals;
@@ -40,7 +61,7 @@ async function searchDealsForBrand(brandName) {
     console.error(`❌ Error fetching deals for ${brandName}:`, error.message);
     if (error.response) {
       console.error(`   Status: ${error.response.status}`);
-      console.error(`   Error: ${error.response.data?.message || error.response.data}`);
+      console.error(`   Data:`, JSON.stringify(error.response.data).substring(0, 500));
     }
     return [];
   }
@@ -164,24 +185,44 @@ async function fetchAndStoreDeals() {
   
   await cleanOldDeals();
   
-  for (const brandName of PRIORITY_BRANDS) {
-    try {
-      const rawDeals = await searchDealsForBrand(brandName);
-      const normalizedDeals = normalizeDeals(rawDeals, brandName);
-      
-      if (normalizedDeals.length > 0) {
-        await storeDealsInFirestore(normalizedDeals, brandName);
-        totalDeals += normalizedDeals.length;
-        successfulBrands++;
-      } else {
-        console.log(`⚠️  No valid deals found for ${brandName}`);
+  // Test with just Nike first
+  console.log('🧪 Testing with Nike only to debug API response...');
+  
+  try {
+    const rawDeals = await searchDealsForBrand('Nike');
+    const normalizedDeals = normalizeDeals(rawDeals, 'Nike');
+    
+    if (normalizedDeals.length > 0) {
+      await storeDealsInFirestore(normalizedDeals, 'Nike');
+      totalDeals += normalizedDeals.length;
+      successfulBrands++;
+    }
+  } catch (error) {
+    console.error(`❌ Failed to process Nike:`, error.message);
+    failedBrands++;
+  }
+  
+  // If Nike worked, continue with others
+  if (totalDeals > 0) {
+    for (const brandName of PRIORITY_BRANDS.slice(1)) {
+      try {
+        const rawDeals = await searchDealsForBrand(brandName);
+        const normalizedDeals = normalizeDeals(rawDeals, brandName);
+        
+        if (normalizedDeals.length > 0) {
+          await storeDealsInFirestore(normalizedDeals, brandName);
+          totalDeals += normalizedDeals.length;
+          successfulBrands++;
+        } else {
+          console.log(`⚠️  No valid deals found for ${brandName}`);
+        }
+        
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+      } catch (error) {
+        console.error(`❌ Failed to process ${brandName}:`, error.message);
+        failedBrands++;
       }
-      
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-    } catch (error) {
-      console.error(`❌ Failed to process ${brandName}:`, error.message);
-      failedBrands++;
     }
   }
   
