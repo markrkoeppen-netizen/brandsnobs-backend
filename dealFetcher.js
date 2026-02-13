@@ -96,7 +96,7 @@ function normalizeDeals(products, brandName) {
   deals.sort((a, b) => parseInt(b.discount) - parseInt(a.discount));
   const topDeals = deals.slice(0, 15);
   
-  console.log(`   ✅ ${topDeals.length} valid deals (${discountPercent >= 10 ? 'with 10%+ discount' : ''})`);
+  console.log(`   ✅ ${topDeals.length} valid deals with 10%+ discount`);
   
   return topDeals;
 }
