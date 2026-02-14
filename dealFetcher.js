@@ -2,15 +2,17 @@ const axios = require('axios');
 const { getFirestore } = require('./firebase');
 
 const PRIORITY_BRANDS = [
-  'Abercrombie & Fitch', 'Adidas', 'Alo', 'Athleta', 'BIRKENSTOCK', 'Burlebo',
-  'Chloé', 'Christian Louboutin', 'Coach', 'Cole Haan', 'Columbia', 'Crocs',
-  'Cult Gaia', 'Dacor', 'Donna Karan', 'Estée Lauder', 'Fendi', 'Feragamo',
-  'Gucci', 'Hermès', 'Jimmy Choo', 'Kate Spade', 'Kith', 'Lacoste',
-  'Louis Vuitton', 'Lucchese', 'Lululemon', 'Madewell', 'Marc Jacobs',
-  'Michael Kors', 'Nike', 'On Running', 'Oscar de la Renta', 'Polo Ralph Lauren',
-  'Prada', 'Saint Laurent', 'Stuart Weitzman', 'The North Face', 'The Row',
-  'Thom Browne', 'Tom Ford', 'Tommy Bahama', 'Tory Burch', 'Tumi', 'UGG',
-  'Vera Wang', 'Vineyard Vines', 'Vuori', 'Yeti'
+  'Abercrombie & Fitch', 'Adidas', 'Allbirds', 'Alo', 'Athleta', 'BIRKENSTOCK',
+  'Bombas', 'Brooks Brothers', 'Burberry', 'Burlebo', 'Chloé', 'Christian Louboutin',
+  'Chubbies', 'Coach', 'Cole Haan', 'Columbia', 'Costa', 'Crocs', 'Cult Gaia',
+  'Dacor', 'Dolce & Gabbana', 'Donna Karan', 'Estée Lauder', 'Fendi', 'Feragamo',
+  'Gucci', 'Hermès', 'Jimmy Choo', 'Kate Spade', 'Kendra Scott', 'Kith', 'Lacoste',
+  'Louis Vuitton', 'Lucchese', 'Lululemon', 'Lush', 'Madewell', 'Marc Jacobs',
+  'Michael Kors', 'Nike', 'Oakley', 'On Running', 'Oscar de la Renta', 'Polo Ralph Lauren',
+  'Poncho', 'Prada', 'Ray-Ban', 'Rhone', 'Saint Laurent', 'Stuart Weitzman',
+  'The North Face', 'The Row', 'Thom Browne', 'Tom Ford', 'Tommy Bahama',
+  'Tory Burch', 'TravisMatthew', 'Tumi', 'UGG', 'Vera Wang', 'Vineyard Vines',
+  'Vuori', 'Yeti'
 ];
 
 async function searchDealsForBrand(brandName) {
