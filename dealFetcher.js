@@ -9,10 +9,10 @@ const PRIORITY_BRANDS = [
   'Gucci', 'Hermès', 'Jimmy Choo', 'Kate Spade', 'Kendra Scott', 'Kith', 'Lacoste',
   'Louis Vuitton', 'Lucchese', 'Lululemon', 'Lush', 'Madewell', 'Marc Jacobs',
   'Michael Kors', 'Nike', 'Oakley', 'On Running', 'Oscar de la Renta', 'Polo Ralph Lauren',
-  'Poncho', 'Prada', 'Ray-Ban', 'Rhone', 'Saint Laurent', 'Stuart Weitzman',
+  'Poncho Outdoors', 'Prada', 'Ray-Ban', 'Rhone', 'Saint Laurent', 'Stuart Weitzman',
   'The North Face', 'The Row', 'Thom Browne', 'Tom Ford', 'Tommy Bahama',
-  'Tory Burch', 'TravisMatthew', 'Tumi', 'UGG', 'Vera Wang', 'Vineyard Vines',
-  'Vuori', 'Yeti'
+  'Tory Burch', 'TravisMatthew', 'Tumi', 'UGG', 'Under Armour', 'Vera Wang',
+  'Vineyard Vines', 'Vuori', 'Yeti', 'YoungLA'
 ];
 
 async function searchDealsForBrand(brandName) {
