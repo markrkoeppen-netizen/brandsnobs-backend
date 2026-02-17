@@ -184,23 +184,45 @@ async function fetchAndStoreDeals() {
   let totalDeals = 0;
   let successfulBrands = 0;
   
-  for (const brandName of PRIORITY_BRANDS) {
-    try {
-      const products = await searchDealsForBrand(brandName);
-      const deals = normalizeDeals(products, brandName);
-      
-      if (deals.length > 0) {
-        await storeDealsInFirestore(deals, brandName);
-        totalDeals += deals.length;
-        successfulBrands++;
+  // Process brands in batches of 10 for parallel fetching
+  const BATCH_SIZE = 10;
+  
+  for (let i = 0; i < PRIORITY_BRANDS.length; i += BATCH_SIZE) {
+    const batch = PRIORITY_BRANDS.slice(i, i + BATCH_SIZE);
+    console.log(`📦 Processing batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(PRIORITY_BRANDS.length / BATCH_SIZE)} (${batch.length} brands)...\n`);
+    
+    // Fetch all brands in this batch in parallel
+    const batchPromises = batch.map(async (brandName) => {
+      try {
+        const products = await searchDealsForBrand(brandName);
+        const deals = normalizeDeals(products, brandName);
+        
+        if (deals.length > 0) {
+          await storeDealsInFirestore(deals, brandName);
+          return { success: true, brand: brandName, count: deals.length };
+        }
+        return { success: true, brand: brandName, count: 0 };
+      } catch (error) {
+        console.error(`❌ Failed: ${brandName} - ${error.message}`);
+        return { success: false, brand: brandName, count: 0 };
       }
-      
-      // Rate limit - wait 1 second between requests
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      console.log('');
-      
-    } catch (error) {
-      console.error(`❌ Failed: ${brandName} - ${error.message}\n`);
+    });
+    
+    const batchResults = await Promise.all(batchPromises);
+    
+    // Tally results
+    batchResults.forEach(result => {
+      if (result.success) {
+        successfulBrands++;
+        totalDeals += result.count;
+      }
+    });
+    
+    console.log('');
+    
+    // Small pause between batches to avoid overwhelming the API
+    if (i + BATCH_SIZE < PRIORITY_BRANDS.length) {
+      await new Promise(resolve => setTimeout(resolve, 2000));
     }
   }
   
@@ -210,7 +232,7 @@ async function fetchAndStoreDeals() {
   console.log(`✅ COMPLETE`);
   console.log(`   Deals: ${totalDeals}`);
   console.log(`   Brands: ${successfulBrands}/${PRIORITY_BRANDS.length}`);
-  console.log(`   Time: ${duration}s`);
+  console.log(`   Time: ${duration}s (${(duration / 60).toFixed(1)} minutes)`);
   console.log('='.repeat(50));
   
   return {
