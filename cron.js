@@ -28,3 +28,7 @@ console.log('🚀 Running initial fetch...\n');
 fetchAndStoreDeals()
   .then(result => console.log('\n✅ Initial fetch complete:', result))
   .catch(error => console.error('\n❌ Initial fetch failed:', error));
+// cron.js - Scheduled deal fetcher
+// Trigger fetch - upgraded to Blaze
+const cron = require('node-cron');
+const { fetchAndStoreDeals } = require('./dealFetcher');
