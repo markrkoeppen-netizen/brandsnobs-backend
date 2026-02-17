@@ -6,11 +6,11 @@ const PRIORITY_BRANDS = [
   'Bombas', 'Brooks Brothers', 'Burberry', 'Burlebo', 'Chloé', 'Christian Louboutin',
   'Chubbies', 'Coach', 'Cole Haan', 'Columbia', 'Costa', 'Crocs', 'Cult Gaia',
   'Dacor', 'Dolce & Gabbana', 'Donna Karan', 'Estée Lauder', 'Fendi', 'Feragamo',
-  'Gucci', 'Hermès', 'Jimmy Choo', 'Kate Spade', 'Kendra Scott', 'Kith', 'Lacoste',
+  'Gucci', 'Havaianas', 'Hermès', 'Jimmy Choo', 'Kate Spade', 'Kendra Scott', 'Kith', 'Lacoste',
   'Louis Vuitton', 'Lucchese', 'Lululemon', 'Lush', 'Madewell', 'Marc Jacobs',
-  'Michael Kors', 'Nike', 'Oakley', 'On Running', 'Oscar de la Renta', 'Polo Ralph Lauren',
-  'Poncho Outdoors', 'Prada', 'Ray-Ban', 'Rhone', 'Saint Laurent', 'Stuart Weitzman',
-  'The North Face', 'The Row', 'Thom Browne', 'Tom Ford', 'Tommy Bahama',
+  'Michael Kors', 'Nike', 'Oakley', 'OluKai', 'On Running', 'OOFOS', 'Oscar de la Renta', 'Polo Ralph Lauren',
+  'Poncho Outdoors', 'Prada', 'Ray-Ban', 'Reef', 'Rhone', 'Saint Laurent', 'Sanuk', 'Stuart Weitzman',
+  'Teva', 'The North Face', 'The Row', 'Thom Browne', 'Tom Ford', 'Tommy Bahama',
   'Tory Burch', 'TravisMatthew', 'Tumi', 'UGG', 'Under Armour', 'Vera Wang',
   'Vineyard Vines', 'Vuori', 'Yeti', 'YoungLA'
 ];
