@@ -1,4 +1,5 @@
 // cron.js - Scheduled deal fetcher with keepalive
+// Refetch with open write rules
 const cron = require('node-cron');
 const { fetchAndStoreDeals } = require('./dealFetcher');
 
