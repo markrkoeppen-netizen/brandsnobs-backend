@@ -1,5 +1,5 @@
 // cron.js - Scheduled deal fetcher
-// Trigger fetch - upgraded to Blaze
+// Refetch after fixing rules
 const cron = require('node-cron');
 const { fetchAndStoreDeals } = require('./dealFetcher');
 
