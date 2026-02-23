@@ -1,239 +1,251 @@
-// dealFetcher.js - Optimized parallel batch fetching
 const axios = require('axios');
-const admin = require('firebase-admin');
+const { getFirestore } = require('./firebase');
 
-// Initialize Firebase Admin (if not already initialized)
-if (!admin.apps.length) {
-  const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
-  admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount)
-  });
-}
-
-const db = admin.firestore();
-
-// 83 BRANDS - Updated with Peter Millar and Goyard
 const PRIORITY_BRANDS = [
-  'Abercrombie & Fitch',
-  'Adidas',
-  'Alo',
-  'Athleta',
-  'BIRKENSTOCK',
-  'Bombas',
-  'Brooks Brothers',
-  'Burberry',
-  'Chloé',
-  'Christian Louboutin',
-  'Chubbies',
-  'Coach',
-  'Cole Haan',
-  'Crocs',
-  'Dolce & Gabbana',
-  'Donna Karan',
-  'Fendi',
-  'Gucci',
-  'Hermès',
-  'Goyard',
-  'Jimmy Choo',
-  'Kate Spade',
-  'Kith',
-  'Lacoste',
-  'Louis Vuitton',
-  'Lululemon',
-  'Lucchese',
-  'Madewell',
-  'Marc Jacobs',
-  'Michael Kors',
-  'Nike',
-  'On Running',
-  'Oscar de la Renta',
-  'Peter Millar',
-  'Polo Ralph Lauren',
-  'Prada',
-  'Rhone',
-  'Saint Laurent',
-  'Stuart Weitzman',
-  'The Row',
-  'Tom Ford',
-  'Tommy Bahama',
-  'Tory Burch',
-  'TravisMatthew',
-  'Tumi',
-  'UGG',
-  'Under Armour',
-  'Vera Wang',
-  'Vineyard Vines',
-  'Vuori',
-  'YoungLA',
-  'Feragamo',
-  'Allbirds',
-  'Ray-Ban',
-  'Oakley',
-  'Costa',
-  'Kendra Scott',
-  'The North Face',
-  'Columbia',
-  'Yeti',
-  'Thom Browne',
-  'Cult Gaia',
-  'Burlebo',
-  'Poncho Outdoors',
-  'Estée Lauder',
-  'Lush',
-  'Dacor',
-  'Ariat',
-  'Wrangler',
-  'Carhartt',
-  'Tecovas',
-  'Corral'
+  'Abercrombie & Fitch', 'Adidas', 'Allbirds', 'Alo', 'Ariat', 'Athleta', 'BIRKENSTOCK',
+  'Bombas', 'Brooks Brothers', 'Burberry', 'Burlebo', 'Carhartt', 'Chloé', 'Christian Louboutin',
+  'Chubbies', 'Cinch', 'Coach', 'Cole Haan', 'Columbia', 'Costa', 'Crocs', 'Cruel Girl', 'Cult Gaia',
+  'Dacor', 'Dolce & Gabbana', 'Donna Karan', 'Estée Lauder', 'Fendi', 'Feragamo',
+  'Gucci', 'Havaianas', 'Hermès', 'Jimmy Choo', 'Justin Boots', 'Kate Spade', 'Kendra Scott', 'Kith', 'Lacoste',
+  'Levi Strauss', 'Louis Vuitton', 'Lucchese', 'Lululemon', 'Lush', 'Madewell', 'Marc Jacobs',
+  'Michael Kors', 'Nike', 'Oakley', 'OluKai', 'On Running', 'OOFOS', 'Oscar de la Renta', 'Panhandle Slim', 'Polo Ralph Lauren',
+  'Poncho Outdoors', 'Prada', 'Ray-Ban', 'Reef', 'Rhone', 'Saint Laurent', 'Sanuk', 'Stetson', 'Stuart Weitzman',
+  'Teva', 'The North Face', 'The Row', 'Thom Browne', 'Tom Ford', 'Tommy Bahama', 'Tony Lama',
+  'Tory Burch', 'TravisMatthew', 'Tumi', 'UGG', 'Under Armour', 'Vera Wang',
+  'Vineyard Vines', 'Vuori', 'Wrangler', 'Yeti', 'YoungLA'
 ];
 
-const RAPIDAPI_KEY = process.env.RAPIDAPI_KEY;
-const RAPIDAPI_HOST = process.env.RAPIDAPI_HOST || 'real-time-product-search.p.rapidapi.com';
+async function searchDealsForBrand(brandName) {
+  const options = {
+    method: 'GET',
+    url: `https://${process.env.RAPIDAPI_HOST}/search-v2`,
+    params: {
+      q: brandName,
+      country: 'us',
+      language: 'en',
+      page: '1',
+      limit: '20',
+      sort_by: 'BEST_MATCH',
+      product_condition: 'ANY'
+    },
+    headers: {
+      'x-rapidapi-host': process.env.RAPIDAPI_HOST,
+      'x-rapidapi-key': process.env.RAPIDAPI_KEY
+    }
+  };
 
-const fetchBrandDeals = async (brandName) => {
   try {
     console.log(`🔍 Fetching ${brandName}...`);
-    
-    const response = await axios.get('https://real-time-product-search.p.rapidapi.com/search', {
-      params: {
-        q: brandName,
-        country: 'us',
-        language: 'en',
-        limit: '20',
-        sort_by: 'BEST_MATCH',
-        product_condition: 'ANY'
-      },
-      headers: {
-        'X-RapidAPI-Key': RAPIDAPI_KEY,
-        'X-RapidAPI-Host': RAPIDAPI_HOST
-      },
-      timeout: 30000
-    });
-
-    if (!response.data || !response.data.data) {
-      console.log(`   ⚠️ No data for ${brandName}`);
-      return [];
-    }
-
-    const products = response.data.data;
+    const response = await axios.request(options);
+    const products = response.data?.data?.products || [];
     console.log(`   Found ${products.length} products`);
-
-    const deals = products
-      .map(product => {
-        if (!product || !product.product_title || !product.offer?.price) {
-          return null;
-        }
-
-        const price = parseFloat(product.offer.price.replace(/[^0-9.]/g, ''));
-        if (isNaN(price) || price <= 0) return null;
-
-        return {
-          brand: brandName,
-          title: product.product_title,
-          price: price,
-          originalPrice: product.typical_price_range?.[1] ? 
-            parseFloat(product.typical_price_range[1].replace(/[^0-9.]/g, '')) || price : price,
-          discount: product.offer.on_sale ? 
-            Math.round(((price / (product.typical_price_range?.[1] ? 
-              parseFloat(product.typical_price_range[1].replace(/[^0-9.]/g, '')) : price)) - 1) * -100) : 0,
-          link: product.offer.offer_page_url || product.product_page_url,
-          image: product.product_photos?.[0] || '',
-          store: product.offer.store_name || 'Unknown',
-          category: 'Fashion',
-          rating: product.product_rating || 0,
-          reviews: product.product_num_reviews || 0,
-          lastUpdated: new Date().toISOString()
-        };
-      })
-      .filter(deal => deal !== null);
-
-    console.log(`   ✅ ${deals.length} valid deals`);
-    return deals;
-
+    return products;
   } catch (error) {
-    console.error(`   ❌ Error fetching ${brandName}:`, error.message);
+    console.error(`   ERROR: ${error.message}`);
     return [];
   }
-};
+}
 
-const fetchBrandsInBatches = async (brands, batchSize = 10) => {
-  const allDeals = [];
-  const totalBatches = Math.ceil(brands.length / batchSize);
+function parsePrice(priceString) {
+  if (!priceString) return null;
+  // Remove $, commas, and convert to number
+  const cleaned = String(priceString).replace(/[$,]/g, '');
+  const num = parseFloat(cleaned);
+  return isNaN(num) ? null : num;
+}
+
+function detectGender(productTitle) {
+  const title = productTitle.toLowerCase();
   
-  for (let i = 0; i < brands.length; i += batchSize) {
-    const batch = brands.slice(i, i + batchSize);
-    const batchNumber = Math.floor(i / batchSize) + 1;
+  // Check for explicit gender keywords
+  if (title.includes("women's") || title.includes('womens') || title.includes('ladies')) return 'women';
+  if (title.includes("men's") || title.includes('mens')) return 'men';
+  if (title.includes("girls'") || title.includes('girls')) return 'girls';
+  if (title.includes("boys'") || title.includes('boys')) return 'boys';
+  
+  // Check for gendered product types
+  if (title.includes('bra') || title.includes('dress') || title.includes('skirt') || title.includes('blouse')) return 'women';
+  if (title.includes('beard') || title.includes('tie')) return 'men';
+  
+  // Default to unisex if can't determine
+  return 'unisex';
+}
+
+function normalizeDeals(products, brandName) {
+  console.log(`📝 Normalizing ${products.length} products for ${brandName}...`);
+  
+  const deals = [];
+  
+  for (const product of products) {
+    // Skip if missing required fields
+    if (!product.product_title) continue;
+    if (!product.offer) continue;
     
-    console.log(`\n📦 Processing batch ${batchNumber}/${totalBatches} (${batch.length} brands)...`);
+    const currentPrice = parsePrice(product.offer.price);
+    if (!currentPrice || currentPrice < 1) continue;
     
-    const batchPromises = batch.map(brand => fetchBrandDeals(brand));
-    const batchResults = await Promise.all(batchPromises);
+    const link = product.offer.offer_page_url || product.product_page_url;
+    if (!link) continue;
     
-    batchResults.forEach((deals, index) => {
-      if (deals.length > 0) {
-        allDeals.push(...deals);
-        console.log(`💾 Stored ${deals.length} deals for ${batch[index]}`);
+    // Calculate discount
+    const originalPrice = parsePrice(product.offer.original_price) || currentPrice * 1.25;
+    const savings = originalPrice - currentPrice;
+    const discountPercent = Math.round((savings / originalPrice) * 100);
+    
+    // Only keep deals with at least 10% off
+    if (discountPercent < 10) continue;
+    
+    // Create unique ID
+    const cleanBrand = brandName.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const cleanTitle = product.product_title.toLowerCase().replace(/[^a-z0-9]/g, '').substring(0, 40);
+    const uniqueId = `${cleanBrand}-${cleanTitle}-${Math.round(currentPrice * 100)}`;
+    
+    deals.push({
+      id: uniqueId,
+      brand: brandName,
+      product: product.product_title,
+      salePrice: Math.round(currentPrice * 100) / 100,
+      originalPrice: Math.round(originalPrice * 100) / 100,
+      discount: `${discountPercent}%`,
+      link: link,
+      image: product.product_photos?.[0] || 'https://images.unsplash.com/photo-1523275335684-37898b6baf30',
+      retailer: product.offer.store_name || 'Online',
+      rating: product.product_rating || null,
+      reviewCount: product.product_num_reviews || null,
+      gender: detectGender(product.product_title),
+      lastUpdated: new Date().toISOString(),
+      fetchedAt: new Date().toISOString()
+    });
+  }
+  
+  // Sort by discount and take top 15
+  deals.sort((a, b) => parseInt(b.discount) - parseInt(a.discount));
+  const topDeals = deals.slice(0, 15);
+  
+  console.log(`   ✅ ${topDeals.length} valid deals with 10%+ discount`);
+  
+  return topDeals;
+}
+
+async function storeDealsInFirestore(deals, brandName) {
+  if (deals.length === 0) return;
+  
+  const db = getFirestore();
+  const batch = db.batch();
+  
+  for (const deal of deals) {
+    const dealRef = db.collection('deals').doc(deal.id);
+    batch.set(dealRef, deal);
+  }
+  
+  await batch.commit();
+  console.log(`💾 Stored ${deals.length} deals for ${brandName}`);
+  
+  // Update brand metadata
+  const brandRef = db.collection('brands').doc(brandName.toLowerCase().replace(/\s+/g, '-'));
+  await brandRef.set({
+    name: brandName,
+    dealCount: deals.length,
+    lastUpdated: new Date().toISOString()
+  }, { merge: true });
+}
+
+async function cleanOldDeals() {
+  const db = getFirestore();
+  const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  
+  try {
+    const oldDeals = await db.collection('deals')
+      .where('fetchedAt', '<', oneDayAgo)
+      .get();
+    
+    if (oldDeals.empty) {
+      console.log('🗑️  No old deals to clean');
+      return;
+    }
+    
+    const batch = db.batch();
+    oldDeals.docs.forEach(doc => batch.delete(doc.ref));
+    await batch.commit();
+    
+    console.log(`🗑️  Cleaned ${oldDeals.size} old deals`);
+  } catch (error) {
+    console.log('⚠️  Could not clean old deals:', error.message);
+  }
+}
+
+async function fetchAndStoreDeals() {
+  console.log('🚀 Starting deal fetch...\n');
+  const startTime = Date.now();
+  
+  await cleanOldDeals();
+  console.log('');
+  
+  let totalDeals = 0;
+  let successfulBrands = 0;
+  
+  // Process brands in batches of 10 for parallel fetching
+  const BATCH_SIZE = 10;
+  
+  for (let i = 0; i < PRIORITY_BRANDS.length; i += BATCH_SIZE) {
+    const batch = PRIORITY_BRANDS.slice(i, i + BATCH_SIZE);
+    console.log(`📦 Processing batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(PRIORITY_BRANDS.length / BATCH_SIZE)} (${batch.length} brands)...\n`);
+    
+    // Fetch all brands in this batch in parallel
+    const batchPromises = batch.map(async (brandName) => {
+      try {
+        const products = await searchDealsForBrand(brandName);
+        const deals = normalizeDeals(products, brandName);
+        
+        if (deals.length > 0) {
+          await storeDealsInFirestore(deals, brandName);
+          return { success: true, brand: brandName, count: deals.length };
+        }
+        return { success: true, brand: brandName, count: 0 };
+      } catch (error) {
+        console.error(`❌ Failed: ${brandName} - ${error.message}`);
+        return { success: false, brand: brandName, count: 0 };
       }
     });
     
-    if (i + batchSize < brands.length) {
-      await new Promise(resolve => setTimeout(resolve, 1000));
+    const batchResults = await Promise.all(batchPromises);
+    
+    // Tally results
+    batchResults.forEach(result => {
+      if (result.success) {
+        successfulBrands++;
+        totalDeals += result.count;
+      }
+    });
+    
+    console.log('');
+    
+    // Small pause between batches to avoid overwhelming the API
+    if (i + BATCH_SIZE < PRIORITY_BRANDS.length) {
+      await new Promise(resolve => setTimeout(resolve, 2000));
     }
   }
   
-  return allDeals;
+  const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+  
+  console.log('='.repeat(50));
+  console.log(`✅ COMPLETE`);
+  console.log(`   Deals: ${totalDeals}`);
+  console.log(`   Brands: ${successfulBrands}/${PRIORITY_BRANDS.length}`);
+  console.log(`   Time: ${duration}s (${(duration / 60).toFixed(1)} minutes)`);
+  console.log('='.repeat(50));
+  
+  return {
+    totalDeals,
+    successfulBrands,
+    failedBrands: PRIORITY_BRANDS.length - successfulBrands,
+    duration: `${duration}s`,
+    timestamp: new Date().toISOString()
+  };
+}
+
+module.exports = {
+  fetchAndStoreDeals,
+  searchDealsForBrand,
+  normalizeDeals
 };
-
-const storeDealsInFirestore = async (allDeals) => {
-  const batch = db.batch();
-  let count = 0;
-
-  for (const deal of allDeals) {
-    const dealId = `${deal.brand}_${Date.now()}_${count}`;
-    const dealRef = db.collection('deals').doc(dealId);
-    batch.set(dealRef, deal);
-    count++;
-  }
-
-  await batch.commit();
-  return count;
-};
-
-const fetchAndStoreDeals = async () => {
-  const startTime = Date.now();
-  console.log(`🚀 Starting deal fetch for ${PRIORITY_BRANDS.length} brands...`);
-  console.log(`⏰ Started at: ${new Date().toISOString()}\n`);
-
-  try {
-    const allDeals = await fetchBrandsInBatches(PRIORITY_BRANDS, 10);
-
-    if (allDeals.length > 0) {
-      await storeDealsInFirestore(allDeals);
-    }
-
-    const duration = ((Date.now() - startTime) / 1000).toFixed(1);
-    const uniqueBrands = new Set(allDeals.map(d => d.brand)).size;
-    
-    console.log('\n' + '='.repeat(50));
-    console.log('✅ COMPLETE');
-    console.log(`   Deals: ${allDeals.length}`);
-    console.log(`   Brands: ${uniqueBrands}/${PRIORITY_BRANDS.length}`);
-    console.log(`   Time: ${duration}s (${(duration / 60).toFixed(1)} minutes)`);
-    console.log('='.repeat(50));
-
-    return {
-      totalDeals: allDeals.length,
-      successfulBrands: uniqueBrands,
-      failedBrands: PRIORITY_BRANDS.length - uniqueBrands,
-      duration: `${duration}s`,
-      timestamp: new Date().toISOString()
-    };
-
-  } catch (error) {
-    console.error('❌ Fatal error:', error);
-    throw error;
-  }
-};
-
-module.exports = { fetchAndStoreDeals };
