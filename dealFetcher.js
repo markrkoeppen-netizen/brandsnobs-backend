@@ -6,10 +6,10 @@ const PRIORITY_BRANDS = [
   'Bombas', 'Brooks Brothers', 'Burberry', 'Burlebo', 'Carhartt', 'Chloé', 'Christian Louboutin',
   'Chubbies', 'Cinch', 'Coach', 'Cole Haan', 'Columbia', 'Costa', 'Crocs', 'Cruel Girl', 'Cult Gaia',
   'Dacor', 'Dolce & Gabbana', 'Donna Karan', 'Estée Lauder', 'Everlane', 'Fendi', 'Feragamo', 'Free People', 'Goyard', 
-  'Gucci', 'Havaianas', 'Hermès', 'Jimmy Choo', 'Justin Boots', 'Kate Spade', 'Kendra Scott', 'Kith', 'Lacoste',
+  'Gorjana', 'Gucci', 'Havaianas', 'Hermès', 'Jimmy Choo', 'Justin Boots', 'Kate Spade', 'Kendra Scott', 'Kith', 'Lacoste',
   'Levi Strauss', 'Louis Vuitton', 'Lucchese', 'Lululemon', 'Lush', 'Madewell', 'Marc Jacobs',
   'Michael Kors', 'Nike', 'Oakley', 'OluKai', 'On Running', 'OOFOS', 'Oscar de la Renta', 'Panhandle Slim', 'Peter Millar', 'Polo Ralph Lauren',
-  'Poncho Outdoors', 'Prada', 'Ray-Ban', 'Reef', 'Rhone', 'Saint Laurent', 'Sanuk', 'Stetson', 'Stuart Weitzman',
+  'Poncho Outdoors', 'Prada', 'Ray-Ban', 'Reef', 'Rhone', 'Saint Laurent', 'Sanuk', 'Spanx', 'Stetson', 'Stuart Weitzman',
   'Teva', 'The North Face', 'The Row', 'Thom Browne', 'Tom Ford', 'Tommy Bahama', 'Tony Lama',
   'Tory Burch', 'TravisMatthew', 'Trendia', 'Tumi', 'UGG', 'Under Armour', 'Vera Wang',
   'Vineyard Vines', 'Vuori', 'Wrangler', 'Yeti', 'YoungLA'
