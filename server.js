@@ -62,22 +62,22 @@ app.get('/stats', async (req, res) => {
   }
 });
 
-// Schedule automatic updates every 6 hours
-// Runs at: 00:00, 06:00, 12:00, 18:00 UTC
-cron.schedule('0 */6 * * *', async () => {
+// Schedule automatic updates once daily at 6 AM UTC
+cron.schedule('0 6 * * *', async () => {
+  console.log('🔄 Running daily deal fetch at 6 AM UTC...');
   console.log('Scheduled deal fetch started:', new Date().toISOString());
   try {
     await fetchAndStoreDeals();
-    console.log('Scheduled deal fetch completed');
+    console.log('✅ Daily deal fetch completed');
   } catch (error) {
-    console.error('Scheduled fetch error:', error);
+    console.error('❌ Scheduled fetch error:', error);
   }
 });
 
 // Start server
 app.listen(PORT, () => {
   console.log(`🚀 Brandsnobs backend running on port ${PORT}`);
-  console.log(`📅 Automatic updates scheduled every ${process.env.UPDATE_INTERVAL || 6} hours`);
+  console.log(`⏰ Cron job scheduled: Deal fetching runs daily at 6 AM UTC`);
   console.log(`🔥 Firebase project: ${process.env.FIREBASE_PROJECT_ID}`);
   
   // Run initial fetch on startup
