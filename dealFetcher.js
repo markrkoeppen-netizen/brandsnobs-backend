@@ -2,17 +2,22 @@ const axios = require('axios');
 const { getFirestore } = require('./firebase');
 
 const PRIORITY_BRANDS = [
-  'Abercrombie & Fitch', 'Adidas', 'Allbirds', 'Alo', 'American Giant', 'Ariat', 'Athleta', 'BIRKENSTOCK',
-  'Bombas', 'Brooks Brothers', 'Burberry', 'Burlebo', 'Carhartt', 'Chloé', 'Christian Louboutin',
-  'Chubbies', 'Cinch', 'Coach', 'Cole Haan', 'Columbia', 'Costa', 'Crocs', 'Cruel Girl', 'Cult Gaia',
-  'Dacor', 'Dolce & Gabbana', 'Donna Karan', 'Estée Lauder', 'Everlane', 'Fendi', 'Feragamo', 'Free People', 'Goyard', 
-  'Gorjana', 'Gucci', 'Havaianas', 'Hermès', 'Jimmy Choo', 'Justin Boots', 'Kate Spade', 'Kendra Scott', 'Kith', 'Lacoste',
-  'Levi Strauss', 'Louis Vuitton', 'Lucchese', 'Lululemon', 'Lush', 'Madewell', 'Marc Jacobs',
-  'Michael Kors', 'Nike', 'Oakley', 'OluKai', 'On Running', 'OOFOS', 'Oscar de la Renta', 'Panhandle Slim', 'Peter Millar', 'Polo Ralph Lauren',
-  'Poncho Outdoors', 'Prada', 'Ray-Ban', 'Reef', 'Rhone', 'Saint Laurent', 'Sanuk', 'Spanx', 'Stetson', 'Stuart Weitzman',
-  'Teva', 'The North Face', 'The Row', 'Thom Browne', 'Tom Ford', 'Tommy Bahama', 'Tony Lama',
-  'Tory Burch', 'TravisMatthew', 'Trendia', 'Tumi', 'UGG', 'Under Armour', 'Vera Wang',
-  'Vineyard Vines', 'Vuori', 'Wrangler', 'Yeti', 'YoungLA'
+  'Abercrombie & Fitch', 'Adidas', 'AG Jeans', 'Allbirds', 'Alo', 'American Giant', 'Anthropologie', 
+  'Arc\'teryx', 'Ariat', 'Aritzia', 'Asics', 'Athleta', 'Away', 'Banana Republic', 'BIRKENSTOCK',
+  'Bombas', 'Bonobos', 'Brooks Brothers', 'Burberry', 'Burlebo', 'Carhartt', 'Chloé', 'Christian Louboutin',
+  'Chubbies', 'Cinch', 'Clarks', 'Coach', 'Cole Haan', 'Columbia', 'Converse', 'Costa', 'Crocs', 
+  'Cruel Girl', 'Cult Gaia', 'Dacor', 'Dolce & Gabbana', 'Donna Karan', 'Dr. Martens', 'Estée Lauder', 
+  'Everlane', 'Fendi', 'Feragamo', 'Free People', 'Gorjana', 'Goyard', 'Gucci', 'Havaianas', 'Hermès', 
+  'Hoka', 'J.Crew', 'Jimmy Choo', 'Justin Boots', 'Kate Spade', 'Kendra Scott', 'Kith', 'Lacoste',
+  'Levi\'s', 'Levi Strauss', 'Louis Vuitton', 'Lucchese', 'Lululemon', 'Lush', 'Madewell', 'Mammut', 
+  'Marc Jacobs', 'Michael Kors', 'New Balance', 'Nike', 'Oakley', 'OluKai', 'On Running', 'OOFOS', 
+  'Oscar de la Renta', 'Outdoor Voices', 'Panhandle Slim', 'Patagonia', 'Peter Millar', 'Polo Ralph Lauren',
+  'Poncho Outdoors', 'Prada', 'Puma', 'Rag & Bone', 'Ray-Ban', 'Reebok', 'Reef', 'Reformation', 
+  'REI Co-op', 'Rhone', 'Saint Laurent', 'Salomon', 'Samsonite', 'Sanuk', 'Spanx', 'Stetson', 
+  'Stuart Weitzman', 'Sweaty Betty', 'Teva', 'The North Face', 'The Row', 'Theory', 'Thom Browne', 
+  'Tiffany & Co.', 'Tom Ford', 'Tommy Bahama', 'Tony Lama', 'Tory Burch', 'TravisMatthew', 'Trendia', 
+  'Tumi', 'UGG', 'Under Armour', 'Untuckit', 'Vans', 'Vera Wang', 'Vince', 'Vineyard Vines', 'Vuori', 
+  'Warby Parker', 'Wrangler', 'Yeti', 'YoungLA'
 ];
 
 async function searchDealsForBrand(brandName) {
