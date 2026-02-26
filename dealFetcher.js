@@ -11,7 +11,7 @@ const PRIORITY_BRANDS = [
   'Hoka', 'J.Crew', 'Jimmy Choo', 'Justin Boots', 'Kate Spade', 'Kendra Scott', 'Kith', 'Lacoste',
   'Levi\'s', 'Levi Strauss', 'Louis Vuitton', 'Lucchese', 'Lululemon', 'Lush', 'Madewell', 'Mammut', 
   'Marc Jacobs', 'Michael Kors', 'New Balance', 'Nike', 'Oakley', 'OluKai', 'On Running', 'OOFOS', 
-  'Oscar de la Renta', 'Outdoor Voices', 'Panhandle Slim', 'Patagonia', 'Peter Millar', 'Polo Ralph Lauren',
+  'Oscar de la Renta', 'Outdoor Voices', 'Panhandle Slim', 'Pelagic', 'Patagonia', 'Peter Millar', 'Polo Ralph Lauren',
   'Poncho Outdoors', 'Prada', 'Puma', 'Rag & Bone', 'Ray-Ban', 'Reebok', 'Reef', 'Reformation', 
   'REI Co-op', 'Rhone', 'Saint Laurent', 'Salomon', 'Samsonite', 'Sanuk', 'Spanx', 'Stetson', 
   'Stuart Weitzman', 'Sweaty Betty', 'Teva', 'The North Face', 'The Row', 'Theory', 'Thom Browne', 
