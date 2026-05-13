@@ -2,22 +2,22 @@ const axios = require('axios');
 const { getFirestore } = require('./firebase');
 
 const PRIORITY_BRANDS = [
-  'Abercrombie & Fitch', 'Adidas', 'AG Jeans', 'Allbirds', 'Alo', 'American Giant', 'Anthropologie', 
+  'Abercrombie & Fitch', 'Adidas', 'Aerie', 'AG Jeans', 'Allbirds', 'Alo', 'American Giant', 'Anthropologie', 
   'Arc\'teryx', 'Ariat', 'Aritzia', 'Asics', 'Athleta', 'Away', 'Banana Republic', 'BIRKENSTOCK',
-  'Bombas', 'Bonobos', 'Brooks Brothers', 'Burberry', 'Burlebo', 'Carhartt', 'Chloé', 'Christian Louboutin',
+  'Bombas', 'Bonobos', 'Brooks Brothers', 'Bubble', 'Burberry', 'Burlebo', 'Calvin Klein', 'Carhartt', 'Chloé', 'Christian Louboutin',
   'Chubbies', 'Cinch', 'Clarks', 'Coach', 'Cole Haan', 'Columbia', 'Converse', 'Costa', 'Crocs', 
   'Cruel Girl', 'Cult Gaia', 'Dacor', 'Dolce & Gabbana', 'Donna Karan', 'Dr. Martens', 'Estée Lauder', 
   'Everlane', 'Fendi', 'Feragamo', 'Free People', 'Gorjana', 'Goyard', 'Gucci', 'Gymshark', 'Havaianas', 'Hermès', 
-  'Hoka', 'J.Crew', 'Jimmy Choo', 'Justin Boots', 'Kate Spade', 'Kendra Scott', 'Kith', 'Lacoste',
-  'Levi\'s', 'Levi Strauss', 'Louis Vuitton', 'Lucchese', 'Lululemon', 'Lush', 'Madewell', 'Mammut', 
+  'Hoka', 'J.Crew', 'Jimmy Choo', 'Justin Boots', 'Kate Spade', 'Kendra Scott', 'Kith', 'Lacoste', 'LANEIGE',
+  'Levi\'s', 'Levi Strauss', 'Louis Vuitton', 'Lucchese', 'Lucky', 'Lululemon', 'Lush', 'Mac Weldon', 'Madewell', 'Mammut', 
   'Marc Jacobs', 'Michael Kors', 'New Balance', 'Nike', 'Oakley', 'OluKai', 'On Running', 'OOFOS', 
-  'Oscar de la Renta', 'Outdoor Voices', 'Panhandle Slim', 'Pelagic', 'Patagonia', 'Peter Millar', 'Polo Ralph Lauren',
+  'Oscar de la Renta', 'Outdoor Voices', 'Panhandle Slim', 'Patagonia', 'Pelagic', 'Peter Millar', 'Polo Ralph Lauren',
   'Poncho Outdoors', 'Prada', 'Puma', 'Rag & Bone', 'Ray-Ban', 'Reebok', 'Reef', 'Reformation', 
-  'REI Co-op', 'Rhone', 'Saint Laurent', 'Salomon', 'Samsonite', 'Sanuk', 'Spanx', 'Stetson', 
+  'REI Co-op', 'Rhone', 'Saint Laurent', 'Salomon', 'Samsonite', 'Sanuk', 'Shade Critters', 'Spanx', 'Stetson', 
   'Stuart Weitzman', 'Sweaty Betty', 'Teva', 'The North Face', 'The Row', 'Theory', 'Thom Browne', 
   'Tiffany & Co.', 'Tom Ford', 'Tommy Bahama', 'Tony Lama', 'Tory Burch', 'TravisMatthew', 'Trendia', 
   'Tumi', 'UGG', 'Under Armour', 'Untuckit', 'Vans', 'Vera Wang', 'Vince', 'Vineyard Vines', 'Vuori', 
-  'Warby Parker', 'Wrangler', 'Yeti', 'YoungLA'
+  'Warby Parker', 'Wrangler', 'Yeti', 'YoungLA', 'Zara'
 ];
 
 async function searchDealsForBrand(brandName) {
