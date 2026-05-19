@@ -2,22 +2,26 @@ const axios = require('axios');
 const { getFirestore } = require('./firebase');
 
 const PRIORITY_BRANDS = [
-  'Abercrombie & Fitch', 'Adidas', 'Aerie', 'AG Jeans', 'Allbirds', 'Alo', 'American Giant', 'Anthropologie', 
+  'Abercrombie & Fitch', 'Adidas', 'Aerie', 'AG Jeans', 'Allbirds', 'Alo', 'American Eagle', 'American Giant', 'Anthropologie', 
   'Arc\'teryx', 'Ariat', 'Aritzia', 'Asics', 'Athleta', 'Away', 'Banana Republic', 'BIRKENSTOCK',
-  'Bombas', 'Bonobos', 'Brooks Brothers', 'Bubble', 'Burberry', 'Burlebo', 'Calvin Klein', 'Carhartt', 'Chloé', 'Christian Louboutin',
-  'Chubbies', 'Cinch', 'Clarks', 'Coach', 'Cole Haan', 'Columbia', 'Converse', 'Costa', 'Crocs', 
+  'Bombas', 'Bonobos', 'Brandy Melville', 'Brooks Brothers', 'Bubble', 'Burberry', 'Burlebo', 
+  'Calvin Klein', 'Carhartt', 'Chloé', 'Christian Louboutin',
+  'Chubbies', 'Cinch', 'Clarks', 'Coach', 'Cole Haan', 'Columbia', 'Comfrt', 'Converse', 'Costa', 'Crocs', 
   'Cruel Girl', 'Cult Gaia', 'Dacor', 'Dolce & Gabbana', 'Donna Karan', 'Dr. Martens', 'Estée Lauder', 
-  'Everlane', 'Fendi', 'Feragamo', 'Free People', 'Gorjana', 'Goyard', 'Gucci', 'Gymshark', 'Havaianas', 'Hermès', 
-  'Hoka', 'J.Crew', 'Jimmy Choo', 'Justin Boots', 'Kate Spade', 'Kendra Scott', 'Kith', 'Lacoste', 'LANEIGE',
-  'Levi\'s', 'Levi Strauss', 'Louis Vuitton', 'Lucchese', 'Lucky', 'Lululemon', 'Lush', 'Mac Weldon', 'Madewell', 'Mammut', 
-  'Marc Jacobs', 'Michael Kors', 'New Balance', 'Nike', 'Oakley', 'OluKai', 'On Running', 'OOFOS', 
-  'Oscar de la Renta', 'Outdoor Voices', 'Panhandle Slim', 'Patagonia', 'Pelagic', 'Peter Millar', 'Polo Ralph Lauren',
-  'Poncho Outdoors', 'Prada', 'Puma', 'Rag & Bone', 'Ray-Ban', 'Reebok', 'Reef', 'Reformation', 
-  'REI Co-op', 'Rhone', 'Saint Laurent', 'Salomon', 'Samsonite', 'Sanuk', 'Shade Critters', 'Spanx', 'Stetson', 
-  'Stuart Weitzman', 'Sweaty Betty', 'Teva', 'The North Face', 'The Row', 'Theory', 'Thom Browne', 
-  'Tiffany & Co.', 'Tom Ford', 'Tommy Bahama', 'Tony Lama', 'Tory Burch', 'TravisMatthew', 'Trendia', 
-  'Tumi', 'UGG', 'Under Armour', 'Untuckit', 'Vans', 'Vera Wang', 'Vince', 'Vineyard Vines', 'Vuori', 
-  'Warby Parker', 'Wrangler', 'Yeti', 'YoungLA', 'Zara'
+  'Everlane', 'Fear of God Essentials', 'Fendi', 'Feragamo', 'Free People', 
+  'Gorjana', 'Goyard', 'Gucci', 'Gymshark', 'Havaianas', 'Hellstar', 'Hermès', 
+  'Hoka', 'Hollister', 'J.Crew', 'Jimmy Choo', 'Justin Boots', 'Kate Spade', 'Kendra Scott', 'Kith', 
+  'Lacoste', 'LANEIGE', 'Levi\'s', 'Levi Strauss', 'Louis Vuitton', 'Lucchese', 'Lucky', 'Lululemon', 
+  'Lush', 'Mac Weldon', 'Madewell', 'Mammut', 'Marc Jacobs', 'Michael Kors', 'New Balance', 'Nike', 
+  'Oakley', 'OluKai', 'On Running', 'OOFOS', 'Oscar de la Renta', 'Outdoor Voices', 'Panhandle Slim', 
+  'Patagonia', 'Pelagic', 'Peter Millar', 'Polo Ralph Lauren', 'Poncho Outdoors', 'Prada', 'Puma', 
+  'Rag & Bone', 'Ray-Ban', 'Reebok', 'Reef', 'Reformation', 'REI Co-op', 'Rhone', 'RTIC Outdoors',
+  'Saint Laurent', 'Salomon', 'Samsonite', 'Sanuk', 'Shade Critters', 'Spanx', 'Stetson', 
+  'Stuart Weitzman', 'Supreme', 'Sweaty Betty', 'Teva', 'The North Face', 'The Row', 'Theory', 
+  'Thom Browne', 'Tiffany & Co.', 'Tom Ford', 'Tommy Bahama', 'Tony Lama', 'Tory Burch', 
+  'TravisMatthew', 'Trendia', 'Tumi', 'UGG', 'Under Armour', 'Untuckit', 'Vans', 'Vera Wang', 
+  'Victoria\'s Secret', 'Vince', 'Vineyard Vines', 'Vuori', 'Warby Parker', 'Wrangler', 
+  'Yeti', 'YoungLA', 'Zara'
 ];
 
 async function searchDealsForBrand(brandName) {
@@ -53,7 +57,6 @@ async function searchDealsForBrand(brandName) {
 
 function parsePrice(priceString) {
   if (!priceString) return null;
-  // Remove $, commas, and convert to number
   const cleaned = String(priceString).replace(/[$,]/g, '');
   const num = parseFloat(cleaned);
   return isNaN(num) ? null : num;
@@ -62,17 +65,13 @@ function parsePrice(priceString) {
 function detectGender(productTitle) {
   const title = productTitle.toLowerCase();
   
-  // Check for explicit gender keywords
   if (title.includes("women's") || title.includes('womens') || title.includes('ladies')) return 'women';
   if (title.includes("men's") || title.includes('mens')) return 'men';
   if (title.includes("girls'") || title.includes('girls')) return 'girls';
   if (title.includes("boys'") || title.includes('boys')) return 'boys';
-  
-  // Check for gendered product types
   if (title.includes('bra') || title.includes('dress') || title.includes('skirt') || title.includes('blouse')) return 'women';
   if (title.includes('beard') || title.includes('tie')) return 'men';
   
-  // Default to unisex if can't determine
   return 'unisex';
 }
 
@@ -82,7 +81,6 @@ function normalizeDeals(products, brandName) {
   const deals = [];
   
   for (const product of products) {
-    // Skip if missing required fields
     if (!product.product_title) continue;
     if (!product.offer) continue;
     
@@ -92,15 +90,12 @@ function normalizeDeals(products, brandName) {
     const link = product.offer.offer_page_url || product.product_page_url;
     if (!link) continue;
     
-    // Calculate discount
     const originalPrice = parsePrice(product.offer.original_price) || currentPrice * 1.25;
     const savings = originalPrice - currentPrice;
     const discountPercent = Math.round((savings / originalPrice) * 100);
     
-    // Only keep deals with at least 10% off
     if (discountPercent < 10) continue;
     
-    // Create unique ID
     const cleanBrand = brandName.toLowerCase().replace(/[^a-z0-9]/g, '');
     const cleanTitle = product.product_title.toLowerCase().replace(/[^a-z0-9]/g, '').substring(0, 40);
     const uniqueId = `${cleanBrand}-${cleanTitle}-${Math.round(currentPrice * 100)}`;
@@ -123,7 +118,6 @@ function normalizeDeals(products, brandName) {
     });
   }
   
-  // Sort by discount and take top 15
   deals.sort((a, b) => parseInt(b.discount) - parseInt(a.discount));
   const topDeals = deals.slice(0, 15);
   
@@ -146,7 +140,6 @@ async function storeDealsInFirestore(deals, brandName) {
   await batch.commit();
   console.log(`💾 Stored ${deals.length} deals for ${brandName}`);
   
-  // Update brand metadata
   const brandRef = db.collection('brands').doc(brandName.toLowerCase().replace(/\s+/g, '-'));
   await brandRef.set({
     name: brandName,
@@ -189,14 +182,12 @@ async function fetchAndStoreDeals() {
   let totalDeals = 0;
   let successfulBrands = 0;
   
-  // Process brands in batches of 10 for parallel fetching
   const BATCH_SIZE = 10;
   
   for (let i = 0; i < PRIORITY_BRANDS.length; i += BATCH_SIZE) {
     const batch = PRIORITY_BRANDS.slice(i, i + BATCH_SIZE);
     console.log(`📦 Processing batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(PRIORITY_BRANDS.length / BATCH_SIZE)} (${batch.length} brands)...\n`);
     
-    // Fetch all brands in this batch in parallel
     const batchPromises = batch.map(async (brandName) => {
       try {
         const products = await searchDealsForBrand(brandName);
@@ -215,7 +206,6 @@ async function fetchAndStoreDeals() {
     
     const batchResults = await Promise.all(batchPromises);
     
-    // Tally results
     batchResults.forEach(result => {
       if (result.success) {
         successfulBrands++;
@@ -225,7 +215,6 @@ async function fetchAndStoreDeals() {
     
     console.log('');
     
-    // Small pause between batches to avoid overwhelming the API
     if (i + BATCH_SIZE < PRIORITY_BRANDS.length) {
       await new Promise(resolve => setTimeout(resolve, 2000));
     }
