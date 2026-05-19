@@ -90,10 +90,25 @@ function normalizeDeals(products, brandName) {
     const link = product.offer.offer_page_url || product.product_page_url;
     if (!link) continue;
     
-    const originalPrice = parsePrice(product.offer.original_price) || currentPrice * 1.25;
+    // ── FEATURE FLAG ─────────────────────────────────────────────
+    // REQUIRE_VERIFIED_PRICE = true  → only deals with a real original price from the API
+    //                                  (accurate but may reduce deal volume)
+    // REQUIRE_VERIFIED_PRICE = false → estimates original price when missing
+    //                                  (more deals but some may be false discounts)
+    // To revert: change true → false below
+    const REQUIRE_VERIFIED_PRICE = true;
+    // ─────────────────────────────────────────────────────────────
+
+    const originalPrice = REQUIRE_VERIFIED_PRICE
+      ? parsePrice(product.offer.original_price)
+      : (parsePrice(product.offer.original_price) || currentPrice * 1.25);
+
+    // Skip if no verified price or item isn't actually cheaper
+    if (!originalPrice || originalPrice <= currentPrice) continue;
+
     const savings = originalPrice - currentPrice;
     const discountPercent = Math.round((savings / originalPrice) * 100);
-    
+
     if (discountPercent < 10) continue;
     
     const cleanBrand = brandName.toLowerCase().replace(/[^a-z0-9]/g, '');
