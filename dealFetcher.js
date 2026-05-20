@@ -24,6 +24,44 @@ const PRIORITY_BRANDS = [
   'Yeti', 'YoungLA', 'Zara'
 ];
 
+// Brand-specific search query overrides
+// Use when the brand name is ambiguous and returns wrong results
+const BRAND_SEARCH_OVERRIDES = {
+  'Comfrt':          'Comfrt clothing brand apparel',
+  'Costa':           'Costa Del Mar sunglasses apparel',
+  'Columbia':        'Columbia Sportswear outdoor clothing',
+  'Bubble':          'Bubble skincare beauty',
+  'Clarks':          'Clarks shoes footwear',
+  'Lucky':           'Lucky Brand jeans clothing',
+  'Reef':            'Reef sandals footwear',
+  'Vince':           'Vince clothing fashion apparel',
+  'Theory':          'Theory clothing fashion apparel',
+  'Lush':            'Lush cosmetics beauty',
+  'Trendia':         'Trendia fashion clothing',
+  'Shade Critters':  'Shade Critters kids swimwear',
+  'Dacor':           'Dacor appliances',
+};
+
+// Brand-specific keyword blocklists
+// If a product title contains ANY of these words, the deal is rejected
+const BRAND_BLOCKLIST = {
+  'Comfrt':  ['softener', 'fabric', 'whiskey', 'whisky', 'bourbon', 'liquor', 'coffee', 'detergent', 'cleaner'],
+  'Costa':   ['coffee', 'cafe', 'espresso', 'latte', 'cappuccino', 'drink', 'beverage'],
+  'Columbia': ['university', 'records', 'pictures', 'film', 'movie', 'school'],
+  'Bubble':  ['wrap', 'bath', 'gum', 'tea', 'drink', 'beverage', 'soda'],
+  'Clarks':  ['candy', 'shoe polish'],
+  'Lucky':   ['charms', 'strike', 'dip', 'tobacco'],
+  'Reef':    ['fish', 'aquarium', 'tank', 'supplement', 'vitamin'],
+  'Lush':    ['plant', 'lawn', 'grass', 'garden', 'fertilizer'],
+};
+
+// Keywords that MUST appear in product title or retailer for the brand to be valid
+// Leave empty to skip this check for a brand
+const BRAND_RELEVANCE_REQUIRED = {
+  'Comfrt':  ['comfrt'],
+  'Costa':   ['costa del mar', 'costa sunglasses', 'costa'],
+};
+
 async function searchDealsForBrand(brandName) {
   const options = {
     method: 'GET',
@@ -43,8 +81,13 @@ async function searchDealsForBrand(brandName) {
     }
   };
 
+  // Use brand-specific search query if defined
+  if (BRAND_SEARCH_OVERRIDES[brandName]) {
+    options.params.q = BRAND_SEARCH_OVERRIDES[brandName];
+  }
+
   try {
-    console.log(`🔍 Fetching ${brandName}...`);
+    console.log(`🔍 Fetching ${brandName} (query: "${options.params.q}")...`);
     const response = await axios.request(options);
     const products = response.data?.data?.products || [];
     console.log(`   Found ${products.length} products`);
@@ -123,9 +166,42 @@ function normalizeDeals(products, brandName) {
   
   const deals = [];
   
+  const blocklist = BRAND_BLOCKLIST[brandName] || [];
+  const relevanceRequired = BRAND_RELEVANCE_REQUIRED[brandName] || [];
+
   for (const product of products) {
     if (!product.product_title) continue;
     if (!product.offer) continue;
+
+    const titleLower = (product.product_title || '').toLowerCase();
+    const retailerLower = (product.offer.store_name || '').toLowerCase();
+    const combinedText = `${titleLower} ${retailerLower}`;
+
+    // Reject if any blocklist word appears in the product title
+    if (blocklist.some(word => titleLower.includes(word))) {
+      console.log(`   ⛔ Blocked: "${product.product_title}" (matched blocklist)`);
+      continue;
+    }
+
+    // Reject if none of the required relevance keywords appear
+    if (relevanceRequired.length > 0 && !relevanceRequired.some(kw => combinedText.includes(kw))) {
+      console.log(`   ⛔ Rejected: "${product.product_title}" (failed relevance check)`);
+      continue;
+    }
+
+    // General relevance check — brand name should appear somewhere in title or retailer
+    // Skip this check for brands with their own relevance rules
+    if (relevanceRequired.length === 0) {
+      const brandWords = brandName.toLowerCase()
+        .replace(/[^a-z0-9\s]/g, '')
+        .split(' ')
+        .filter(w => w.length > 2);
+      const brandAppears = brandWords.some(word => combinedText.includes(word));
+      if (!brandAppears) {
+        console.log(`   ⛔ Rejected: "${product.product_title}" (brand name not found)`);
+        continue;
+      }
+    }
     
     const currentPrice = parsePrice(product.offer.price);
     if (!currentPrice || currentPrice < 1) continue;
