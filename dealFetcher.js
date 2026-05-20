@@ -64,15 +64,58 @@ function parsePrice(priceString) {
 
 function detectGender(productTitle) {
   const title = productTitle.toLowerCase();
-  
-  if (title.includes("women's") || title.includes('womens') || title.includes('ladies')) return 'women';
-  if (title.includes("men's") || title.includes('mens')) return 'men';
-  if (title.includes("girls'") || title.includes('girls')) return 'girls';
-  if (title.includes("boys'") || title.includes('boys')) return 'boys';
-  if (title.includes('bra') || title.includes('dress') || title.includes('skirt') || title.includes('blouse')) return 'women';
-  if (title.includes('beard') || title.includes('tie')) return 'men';
-  
-  return 'unisex';
+
+  // Check women FIRST and broadly — before men, to avoid "women" being missed
+  const womenKeywords = [
+    "women's", "womens", "woman's", "womans", "women ", "women-",
+    "ladies", "lady's", "ladys", "feminine", "female",
+    "girls'", "girls ", "girl's", "girls-", "junior girls",
+    // Gendered product types
+    "bra", "bralette", "bikini top", "tankini", "one-piece swimsuit",
+    "dress", "skirt", "blouse", "camisole", "cami", "lingerie",
+    "maternity", "nursing", "midi", "maxi skirt", "mini skirt",
+    "bodysuit", "jumpsuit for women", "romper for women"
+  ];
+
+  const menKeywords = [
+    "men's", "mens", "man's", "mans", "men ", "men-",
+    "boys'", "boys ", "boy's", "boys-", "junior boys",
+    "masculine", "male ",
+    // Gendered product types
+    "beard", "necktie", "bow tie", "cufflinks",
+    "boxer", "brief for men", "jockstrap",
+    "tuxedo", "suit jacket for men"
+  ];
+
+  const kidsKeywords = [
+    "kids'", "kids ", "kid's", "children's", "childrens",
+    "toddler", "infant", "baby ", "youth ", "juvenile",
+    "little kids", "big kids", "grade school"
+  ];
+
+  const unisexKeywords = [
+    "unisex", "gender neutral", "gender-neutral",
+    "all genders", "everyone", "adult "
+  ];
+
+  // Check for explicit unisex first
+  if (unisexKeywords.some(kw => title.includes(kw))) return 'unisex';
+
+  // Check kids (separate from boys/girls)
+  if (kidsKeywords.some(kw => title.includes(kw))) {
+    // Try to determine if boys or girls kids
+    if (womenKeywords.some(kw => title.includes(kw))) return 'girls';
+    if (menKeywords.some(kw => title.includes(kw))) return 'boys';
+    return 'kids'; // generic kids — shown under boys AND girls filters
+  }
+
+  // Check women before men to avoid partial matches
+  if (womenKeywords.some(kw => title.includes(kw))) return 'women';
+  if (menKeywords.some(kw => title.includes(kw))) return 'men';
+
+  // Return null for truly untagged items — frontend will show these
+  // only when NO gender filter is active, not under all filters
+  return null;
 }
 
 function normalizeDeals(products, brandName) {
