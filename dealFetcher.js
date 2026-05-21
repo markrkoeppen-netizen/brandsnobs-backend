@@ -21,7 +21,9 @@ const PRIORITY_BRANDS = [
   'Thom Browne', 'Tiffany & Co.', 'Tom Ford', 'Tommy Bahama', 'Tony Lama', 'Tory Burch', 
   'TravisMatthew', 'Trendia', 'Tumi', 'UGG', 'Under Armour', 'Untuckit', 'Vans', 'Vera Wang', 
   'Victoria\'s Secret', 'Vince', 'Vineyard Vines', 'Vuori', 'Warby Parker', 'Wrangler', 
-  'Yeti', 'YoungLA', 'Zara'
+  'Yeti', 'YoungLA', 'Zara',
+  'H&M', 'Tommy Hilfiger', 'Veja', 'Dooney & Bourke',
+  'Stüssy', 'Loewe', 'Bottega Veneta', 'Alaïa', 'Staud', 'Alice + Olivia', 'Mango'
 ];
 
 // Brand-specific search query overrides
