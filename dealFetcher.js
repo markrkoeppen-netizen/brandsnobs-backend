@@ -23,7 +23,8 @@ const PRIORITY_BRANDS = [
   'Victoria\'s Secret', 'Vince', 'Vineyard Vines', 'Vuori', 'Warby Parker', 'Wrangler', 
   'Yeti', 'YoungLA', 'Zara',
   'H&M', 'Tommy Hilfiger', 'Veja', 'Dooney & Bourke',
-  'Stüssy', 'Loewe', 'Bottega Veneta', 'Alaïa', 'Staud', 'Alice + Olivia', 'Mango'
+  'Stüssy', 'Loewe', 'Bottega Veneta', 'Alaïa', 'Staud', 'Alice + Olivia', 'Mango',
+  'Baseball Lifestyle 101', 'Dirty Mids'
 ];
 
 // Brand-specific search query overrides
@@ -41,6 +42,8 @@ const BRAND_SEARCH_OVERRIDES = {
   'Lush':            'Lush cosmetics beauty',
   'Trendia':         'Trendia fashion clothing',
   'Shade Critters':  'Shade Critters kids swimwear',
+  'Baseball Lifestyle 101': 'Baseball Lifestyle 101 clothing apparel',
+  'Dirty Mids': 'Dirty Mids sneakers footwear',
   'Dacor':           'Dacor appliances',
 };
 
@@ -55,6 +58,8 @@ const BRAND_BLOCKLIST = {
   'Lucky':   ['charms', 'strike', 'dip', 'tobacco'],
   'Reef':    ['fish', 'aquarium', 'tank', 'supplement', 'vitamin'],
   'Lush':    ['plant', 'lawn', 'grass', 'garden', 'fertilizer'],
+  'Baseball Lifestyle 101': ['field maintenance', 'pitching machine', 'batting cage', 'dugout'],
+  'Dirty Mids': ['dirty', 'used', 'worn', 'vintage', 'damaged'],
 };
 
 // Keywords that MUST appear in product title or retailer for the brand to be valid
