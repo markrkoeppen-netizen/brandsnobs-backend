@@ -191,11 +191,13 @@ function normalizeDeals(products, brandName) {
       continue;
     }
 
-    // General relevance check — brand name should appear somewhere in title or retailer
-    // Skip this check for brands with their own relevance rules
-    if (relevanceRequired.length === 0) {
+    // General relevance check — only apply to brands that are highly ambiguous
+    // (i.e. single common words that could match anything)
+    // For well-known fashion/lifestyle brands, trust the API search results
+    const AMBIGUOUS_BRANDS = ['Bubble', 'Clarks', 'Lucky', 'Reef', 'Lush', 'Vince', 'Theory', 'Mango'];
+    if (relevanceRequired.length === 0 && AMBIGUOUS_BRANDS.includes(brandName)) {
       const brandWords = brandName.toLowerCase()
-        .replace(/[^a-z0-9\s]/g, '')
+        .replace(/[^a-z0-9]/g, ' ')
         .split(' ')
         .filter(w => w.length > 2);
       const brandAppears = brandWords.some(word => combinedText.includes(word));
