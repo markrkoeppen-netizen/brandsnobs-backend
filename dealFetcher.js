@@ -217,7 +217,7 @@ function normalizeDeals(products, brandName) {
     // REQUIRE_VERIFIED_PRICE = false → estimates original price when missing
     //                                  (more deals but some may be false discounts)
     // To revert: change true → false below
-    const REQUIRE_VERIFIED_PRICE = true;
+    const REQUIRE_VERIFIED_PRICE = false;
     // ─────────────────────────────────────────────────────────────
 
     const originalPrice = REQUIRE_VERIFIED_PRICE
