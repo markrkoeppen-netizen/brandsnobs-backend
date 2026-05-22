@@ -42,7 +42,7 @@ const BRAND_SEARCH_OVERRIDES = {
   'Lush':            'Lush cosmetics beauty',
   'Trendia':         'Trendia fashion clothing',
   'Shade Critters':  'Shade Critters kids swimwear',
-  'Baseball Lifestyle 101': 'Baseball Lifestyle 101 clothing apparel',
+  'Baseball Lifestyle 101': 'Baseball Lifestyle 101 Dicks Sporting Goods apparel hat',
   'Dirty Mids': 'Dirty Mids sneakers footwear',
   'Dacor':           'Dacor appliances',
 };
