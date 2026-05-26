@@ -199,8 +199,22 @@ function normalizeDeals(products, brandName) {
     // General relevance check — only apply to brands that are highly ambiguous
     // (i.e. single common words that could match anything)
     // For well-known fashion/lifestyle brands, trust the API search results
+    // AMBIGUOUS_BRANDS: single common words that could match unrelated products
     const AMBIGUOUS_BRANDS = ['Bubble', 'Clarks', 'Lucky', 'Reef', 'Lush', 'Vince', 'Theory', 'Mango'];
-    if (relevanceRequired.length === 0 && AMBIGUOUS_BRANDS.includes(brandName)) {
+
+    // TRUSTED_BRANDS: well-known brands whose products often don't include brand name in title
+    // e.g. Lululemon "Align Pant", Yeti "Rambler Tumbler" — skip relevance check for these
+    const TRUSTED_BRANDS = [
+      'Lululemon', 'Yeti', 'Patagonia', 'The North Face', 'Nike', 'Adidas', 'Puma',
+      'Alo', 'Vuori', 'Gymshark', 'Athleta', 'Sweaty Betty', 'Outdoor Voices',
+      'Mammut', 'Salomon', 'Hoka', 'On Running', 'Allbirds', 'Veja',
+      'BIRKENSTOCK', 'Teva', 'UGG', 'Crocs', 'Converse', 'Vans',
+      'Polo Ralph Lauren', 'Tommy Hilfiger', 'Calvin Klein', 'Lacoste',
+      'Vineyard Vines', 'Peter Millar', 'Tommy Bahama', 'TravisMatthew',
+      'Rhone', 'Mac Weldon', 'Bonobos', 'Untuckit',
+    ];
+
+    if (!TRUSTED_BRANDS.includes(brandName) && relevanceRequired.length === 0 && AMBIGUOUS_BRANDS.includes(brandName)) {
       const brandWords = brandName.toLowerCase()
         .replace(/[^a-z0-9]/g, ' ')
         .split(' ')
