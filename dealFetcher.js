@@ -112,8 +112,23 @@ function parsePrice(priceString) {
   return isNaN(num) ? null : num;
 }
 
-function detectGender(productTitle) {
+// Brands that are inherently unisex regardless of product title
+const UNISEX_BRANDS = [
+  'Yeti', 'RTIC Outdoors', 'Pelagic', 'The North Face', 'Columbia', 'Patagonia',
+  'Arc'teryx', 'REI Co-op', 'Mammut', 'Salomon', 'Hoka', 'On Running', 'Allbirds',
+  'Veja', 'BIRKENSTOCK', 'Teva', 'Crocs', 'Reef', 'Sanuk', 'OluKai', 'OOFOS',
+  'Converse', 'Vans', 'New Balance', 'Asics', 'Reebok', 'Puma',
+  'Costa', 'Oakley', 'Ray-Ban', 'Warby Parker', 'Kith', 'Supreme', 'Stüssy',
+  'Carhartt', 'Wrangler', 'Ariat', 'Stetson', 'Tumi', 'Samsonite', 'Away',
+  'Bombas', 'Havaianas', 'Gorjana', 'Kendra Scott', 'Lacoste',
+  'Estée Lauder', 'Lush', 'Bubble', 'LANEIGE', 'Yeti', 'Dacor',
+];
+
+function detectGender(productTitle, brandName) {
   const title = productTitle.toLowerCase();
+
+  // If the brand is inherently unisex, return unisex immediately
+  if (brandName && UNISEX_BRANDS.includes(brandName)) return 'unisex';
 
   // Check women FIRST and broadly — before men, to avoid "women" being missed
   const womenKeywords = [
@@ -269,7 +284,7 @@ function normalizeDeals(products, brandName) {
       retailer: product.offer.store_name || 'Online',
       rating: product.product_rating || null,
       reviewCount: product.product_num_reviews || null,
-      gender: detectGender(product.product_title),
+      gender: detectGender(product.product_title, brandName),
       lastUpdated: new Date().toISOString(),
       fetchedAt: new Date().toISOString()
     });
