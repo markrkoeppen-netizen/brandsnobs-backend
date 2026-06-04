@@ -112,16 +112,15 @@ function parsePrice(priceString) {
   return isNaN(num) ? null : num;
 }
 
-// Brands that are inherently unisex regardless of product title
+// Brands that are TRULY unisex — only sell gender-neutral products
+// Do NOT include brands that sell both men's and women's clothing/footwear
 const UNISEX_BRANDS = [
-  'Yeti', 'RTIC Outdoors', 'Pelagic', 'The North Face', 'Columbia', 'Patagonia',
-  'Arc'teryx', 'REI Co-op', 'Mammut', 'Salomon', 'Hoka', 'On Running', 'Allbirds',
-  'Veja', 'BIRKENSTOCK', 'Teva', 'Crocs', 'Reef', 'Sanuk', 'OluKai', 'OOFOS',
-  'Converse', 'Vans', 'New Balance', 'Asics', 'Reebok', 'Puma',
-  'Costa', 'Oakley', 'Ray-Ban', 'Warby Parker', 'Kith', 'Supreme', 'Stüssy',
-  'Carhartt', 'Wrangler', 'Ariat', 'Stetson', 'Tumi', 'Samsonite', 'Away',
-  'Bombas', 'Havaianas', 'Gorjana', 'Kendra Scott', 'Lacoste',
-  'Estée Lauder', 'Lush', 'Bubble', 'LANEIGE', 'Yeti', 'Dacor',
+  'Yeti', 'RTIC Outdoors', 'Pelagic',
+  'Costa', 'Oakley', 'Ray-Ban', 'Warby Parker',
+  'Tumi', 'Samsonite', 'Away',
+  'Gorjana', 'Kendra Scott',
+  'Estée Lauder', 'Lush', 'Bubble', 'LANEIGE', 'Dacor',
+  'Bombas',
 ];
 
 function detectGender(productTitle, brandName) {
