@@ -211,13 +211,9 @@ function normalizeDeals(products, brandName) {
     }
 
     // General relevance check — only apply to brands that are highly ambiguous
-    // (i.e. single common words that could match anything)
-    // For well-known fashion/lifestyle brands, trust the API search results
-    // AMBIGUOUS_BRANDS: single common words that could match unrelated products
     const AMBIGUOUS_BRANDS = ['Bubble', 'Clarks', 'Lucky', 'Reef', 'Lush', 'Vince', 'Theory', 'Mango'];
 
     // TRUSTED_BRANDS: well-known brands whose products often don't include brand name in title
-    // e.g. Lululemon "Align Pant", Yeti "Rambler Tumbler" — skip relevance check for these
     const TRUSTED_BRANDS = [
       'Lululemon', 'Yeti', 'Patagonia', 'The North Face', 'Nike', 'Adidas', 'Puma',
       'Alo', 'Vuori', 'Gymshark', 'Athleta', 'Sweaty Betty', 'Outdoor Voices',
@@ -248,10 +244,7 @@ function normalizeDeals(products, brandName) {
     
     // ── FEATURE FLAG ─────────────────────────────────────────────
     // REQUIRE_VERIFIED_PRICE = true  → only deals with a real original price from the API
-    //                                  (accurate but may reduce deal volume)
-    // REQUIRE_VERIFIED_PRICE = false → estimates original price when missing
-    //                                  (more deals but some may be false discounts)
-    // To revert: change true → false below
+    // REQUIRE_VERIFIED_PRICE = false → estimates original price when missing (more deals)
     const REQUIRE_VERIFIED_PRICE = false;
     // ─────────────────────────────────────────────────────────────
 
@@ -259,7 +252,6 @@ function normalizeDeals(products, brandName) {
       ? parsePrice(product.offer.original_price)
       : (parsePrice(product.offer.original_price) || currentPrice * 1.25);
 
-    // Skip if no verified price or item isn't actually cheaper
     if (!originalPrice || originalPrice <= currentPrice) continue;
 
     const savings = originalPrice - currentPrice;
@@ -346,60 +338,47 @@ async function cleanOldDeals() {
 async function fetchAndStoreDeals() {
   console.log('🚀 Starting deal fetch...\n');
   const startTime = Date.now();
-  
+
   await cleanOldDeals();
   console.log('');
-  
+
   let totalDeals = 0;
   let successfulBrands = 0;
-  
-  const BATCH_SIZE = 10;
-  
-  for (let i = 0; i < PRIORITY_BRANDS.length; i += BATCH_SIZE) {
-    const batch = PRIORITY_BRANDS.slice(i, i + BATCH_SIZE);
-    console.log(`📦 Processing batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(PRIORITY_BRANDS.length / BATCH_SIZE)} (${batch.length} brands)...\n`);
-    
-    const batchPromises = batch.map(async (brandName) => {
-      try {
-        const products = await searchDealsForBrand(brandName);
-        const deals = normalizeDeals(products, brandName);
-        
-        if (deals.length > 0) {
-          await storeDealsInFirestore(deals, brandName);
-          return { success: true, brand: brandName, count: deals.length };
-        }
-        return { success: true, brand: brandName, count: 0 };
-      } catch (error) {
-        console.error(`❌ Failed: ${brandName} - ${error.message}`);
-        return { success: false, brand: brandName, count: 0 };
+
+  // Process brands ONE AT A TIME with a delay between each
+  // This prevents hitting RapidAPI rate limits (429 errors)
+  for (let i = 0; i < PRIORITY_BRANDS.length; i++) {
+    const brandName = PRIORITY_BRANDS[i];
+    console.log(`📦 Processing brand ${i + 1}/${PRIORITY_BRANDS.length}: ${brandName}`);
+
+    try {
+      const products = await searchDealsForBrand(brandName);
+      const deals = normalizeDeals(products, brandName);
+
+      if (deals.length > 0) {
+        await storeDealsInFirestore(deals, brandName);
+        totalDeals += deals.length;
       }
-    });
-    
-    const batchResults = await Promise.all(batchPromises);
-    
-    batchResults.forEach(result => {
-      if (result.success) {
-        successfulBrands++;
-        totalDeals += result.count;
-      }
-    });
-    
-    console.log('');
-    
-    if (i + BATCH_SIZE < PRIORITY_BRANDS.length) {
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      successfulBrands++;
+    } catch (error) {
+      console.error(`❌ Failed: ${brandName} - ${error.message}`);
+    }
+
+    // Wait 3 seconds between each brand to stay within RapidAPI rate limits
+    if (i < PRIORITY_BRANDS.length - 1) {
+      await new Promise(resolve => setTimeout(resolve, 3000));
     }
   }
-  
+
   const duration = ((Date.now() - startTime) / 1000).toFixed(1);
-  
+
   console.log('='.repeat(50));
   console.log(`✅ COMPLETE`);
   console.log(`   Deals: ${totalDeals}`);
   console.log(`   Brands: ${successfulBrands}/${PRIORITY_BRANDS.length}`);
   console.log(`   Time: ${duration}s (${(duration / 60).toFixed(1)} minutes)`);
   console.log('='.repeat(50));
-  
+
   return {
     totalDeals,
     successfulBrands,
