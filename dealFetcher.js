@@ -192,10 +192,10 @@ function normalizeDeals(products, brandName) {
 
   for (const product of products) {
     if (!product.product_title) continue;
-    if (!product.offer) continue;
+    
 
     const titleLower = (product.product_title || '').toLowerCase();
-    const retailerLower = (product.offer.store_name || '').toLowerCase();
+    const retailerLower = (product.store_name || '').toLowerCase();
     const combinedText = `${titleLower} ${retailerLower}`;
 
     // Reject if any blocklist word appears in the product title
@@ -236,10 +236,10 @@ function normalizeDeals(products, brandName) {
       }
     }
     
-    const currentPrice = parsePrice(product.offer.price);
+    const currentPrice = parsePrice(product.price);
     if (!currentPrice || currentPrice < 1) continue;
     
-    const link = product.offer.offer_page_url || product.product_page_url;
+    const link = product.product_page_url;
     if (!link) continue;
     
     // ── FEATURE FLAG ─────────────────────────────────────────────
@@ -249,8 +249,8 @@ function normalizeDeals(products, brandName) {
     // ─────────────────────────────────────────────────────────────
 
     const originalPrice = REQUIRE_VERIFIED_PRICE
-      ? parsePrice(product.offer.original_price)
-      : (parsePrice(product.offer.original_price) || currentPrice * 1.25);
+      ? parsePrice(product.original_price)
+      : (parsePrice(product.original_price) || currentPrice * 1.25);
 
     if (!originalPrice || originalPrice <= currentPrice) continue;
 
@@ -272,7 +272,7 @@ function normalizeDeals(products, brandName) {
       discount: `${discountPercent}%`,
       link: link,
       image: product.product_photos?.[0] || 'https://images.unsplash.com/photo-1523275335684-37898b6baf30',
-      retailer: product.offer.store_name || 'Online',
+      retailer: product.store_name || 'Online',
       rating: product.product_rating || null,
       reviewCount: product.product_num_reviews || null,
       gender: detectGender(product.product_title, brandName),
