@@ -72,7 +72,7 @@ const BRAND_RELEVANCE_REQUIRED = {
 async function searchDealsForBrand(brandName) {
   const options = {
     method: 'GET',
-    url: `https://${process.env.RAPIDAPI_HOST}/search-v2`,
+    url: `https://${process.env.RAPIDAPI_HOST}/search`,
     params: {
       q: brandName,
       country: 'us',
