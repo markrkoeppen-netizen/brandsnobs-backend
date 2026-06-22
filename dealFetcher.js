@@ -72,9 +72,9 @@ const BRAND_RELEVANCE_REQUIRED = {
 async function searchDealsForBrand(brandName) {
   const options = {
     method: 'GET',
-    url: `https://${process.env.RAPIDAPI_HOST}/search`,
+    url: `https://${process.env.RAPIDAPI_HOST}/deals`,
     params: {
-      q: brandName,
+      q: `deals ${brandName}`,
       country: 'us',
       language: 'en',
       page: '1',
@@ -90,7 +90,7 @@ async function searchDealsForBrand(brandName) {
 
   // Use brand-specific search query if defined
   if (BRAND_SEARCH_OVERRIDES[brandName]) {
-    options.params.q = BRAND_SEARCH_OVERRIDES[brandName];
+    options.params.q = `deals ${BRAND_SEARCH_OVERRIDES[brandName]}`;
   }
 
   try {
@@ -236,28 +236,29 @@ function normalizeDeals(products, brandName) {
       }
     }
     
+    // Deals endpoint only returns on_sale items — skip anything not marked on sale
+    if (!product.on_sale) continue;
+
     const currentPrice = parsePrice(product.price);
     if (!currentPrice || currentPrice < 1) continue;
-    
+
     const link = product.product_page_url;
     if (!link) continue;
-    
-    // ── FEATURE FLAG ─────────────────────────────────────────────
-    // REQUIRE_VERIFIED_PRICE = true  → only deals with a real original price from the API
-    // REQUIRE_VERIFIED_PRICE = false → estimates original price when missing (more deals)
-    const REQUIRE_VERIFIED_PRICE = false;
-    // ─────────────────────────────────────────────────────────────
 
-    const originalPrice = REQUIRE_VERIFIED_PRICE
-      ? parsePrice(product.original_price)
-      : (parsePrice(product.original_price) || currentPrice * 1.25);
-
-    if (!originalPrice || originalPrice <= currentPrice) continue;
-
-    const savings = originalPrice - currentPrice;
-    const discountPercent = Math.round((savings / originalPrice) * 100);
+    // Use the API's pre-calculated discount percent if available
+    // Otherwise calculate from prices
+    let discountPercent;
+    if (product.discount_percent) {
+      discountPercent = parseInt(product.discount_percent);
+    } else {
+      const calcOriginal = parsePrice(product.original_price) || currentPrice * 1.25;
+      if (!calcOriginal || calcOriginal <= currentPrice) continue;
+      discountPercent = Math.round(((calcOriginal - currentPrice) / calcOriginal) * 100);
+    }
 
     if (discountPercent < 10) continue;
+
+    const originalPrice = parsePrice(product.original_price) || Math.round(currentPrice / (1 - discountPercent / 100) * 100) / 100;
     
     const cleanBrand = brandName.toLowerCase().replace(/[^a-z0-9]/g, '');
     const cleanTitle = product.product_title.toLowerCase().replace(/[^a-z0-9]/g, '').substring(0, 40);
