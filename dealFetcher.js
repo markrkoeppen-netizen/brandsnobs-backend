@@ -246,7 +246,9 @@ function normalizeDeals(products, brandName) {
     const currentPrice = parsePrice(product.price);
     if (!currentPrice || currentPrice < 1) continue;
 
-    const link = product.product_page_url;
+    // offer_page_url is the direct retailer product page (e.g. nike.com/...)
+    // product_page_url is always a Google Shopping URL — NOT what we want
+    const link = product.offer_page_url || product.product_page_url;
     if (!link) continue;
 
     // Use the API's pre-calculated discount percent if available
