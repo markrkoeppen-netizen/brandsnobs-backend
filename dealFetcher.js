@@ -240,31 +240,44 @@ function normalizeDeals(products, brandName) {
       }
     }
     
-    // Deals endpoint only returns on_sale items — skip anything not marked on sale
-    if (!product.on_sale) continue;
+    // ── Find the best on-sale offer ─────────────────────────────
+    // The direct retailer URL lives inside product.offers[].offer_page_url
+    // product.product_page_url is ALWAYS a Google Shopping URL — never use it
+    // Find the first offer that is on sale and has a direct retailer URL
+    const onSaleOffer = (product.offers || []).find(o => o.on_sale && o.offer_page_url);
+    const bestOffer = onSaleOffer || (product.offers || [])[0];
 
-    const currentPrice = parsePrice(product.price);
-    if (!currentPrice || currentPrice < 1) continue;
-
-    // offer_page_url is the direct retailer product page (e.g. nike.com/...)
-    // product_page_url is always a Google Shopping URL — NOT what we want
-    const link = product.offer_page_url || product.product_page_url;
+    // Skip if no offer with a direct retailer link exists
+    const link = bestOffer?.offer_page_url || null;
     if (!link) continue;
+
+    // Skip if neither the product nor the best offer is marked on sale
+    if (!product.on_sale && !bestOffer?.on_sale) continue;
+
+    // Use offer-level price data when available (more accurate), fall back to product-level
+    const currentPrice = parsePrice(bestOffer?.price || product.price);
+    if (!currentPrice || currentPrice < 1) continue;
 
     // Use the API's pre-calculated discount percent if available
     // Otherwise calculate from prices
     let discountPercent;
-    if (product.discount_percent) {
+    if (bestOffer?.percent_off) {
+      // percent_off comes as "16% off" — extract the number
+      discountPercent = parseInt(bestOffer.percent_off);
+    } else if (product.discount_percent) {
       discountPercent = parseInt(product.discount_percent);
     } else {
-      const calcOriginal = parsePrice(product.original_price) || currentPrice * 1.25;
+      const calcOriginal = parsePrice(bestOffer?.original_price || product.original_price) || currentPrice * 1.25;
       if (!calcOriginal || calcOriginal <= currentPrice) continue;
       discountPercent = Math.round(((calcOriginal - currentPrice) / calcOriginal) * 100);
     }
 
     if (discountPercent < 10) continue;
 
-    const originalPrice = parsePrice(product.original_price) || Math.round(currentPrice / (1 - discountPercent / 100) * 100) / 100;
+    const originalPrice = parsePrice(bestOffer?.original_price || product.original_price)
+      || Math.round(currentPrice / (1 - discountPercent / 100) * 100) / 100;
+
+    const retailerName = bestOffer?.store_name || product.store_name || 'Online';
     
     const cleanBrand = brandName.toLowerCase().replace(/[^a-z0-9]/g, '');
     const cleanTitle = product.product_title.toLowerCase().replace(/[^a-z0-9]/g, '').substring(0, 40);
@@ -273,13 +286,13 @@ function normalizeDeals(products, brandName) {
     deals.push({
       id: uniqueId,
       brand: brandName,
-      product: product.product_title,
+      product: bestOffer?.offer_title || product.product_title,
       salePrice: Math.round(currentPrice * 100) / 100,
       originalPrice: Math.round(originalPrice * 100) / 100,
       discount: `${discountPercent}%`,
       link: link,
       image: product.product_photos?.[0] || 'https://images.unsplash.com/photo-1523275335684-37898b6baf30',
-      retailer: product.store_name || 'Online',
+      retailer: retailerName,
       rating: product.product_rating || null,
       reviewCount: product.product_num_reviews || null,
       gender: detectGender(product.product_title, brandName),
