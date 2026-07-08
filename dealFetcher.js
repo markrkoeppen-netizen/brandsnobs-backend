@@ -75,11 +75,16 @@ const BRAND_RELEVANCE_REQUIRED = {
 };
 
 async function searchDealsForBrand(brandName) {
+  // NOTE: We use /search NOT /deals.
+  // The /deals endpoint only returns google.com/aclk redirect URLs which land on
+  // Google Shopping — not the actual retailer. The /search endpoint returns
+  // product.offer.offer_page_url which is the real direct retailer URL (nike.com, etc).
+  // We filter for on-sale items inside normalizeDeals via product.offer.on_sale.
   const options = {
     method: 'GET',
-    url: `https://${process.env.RAPIDAPI_HOST}/deals`,
+    url: `https://${process.env.RAPIDAPI_HOST}/search`,
     params: {
-      q: `deals ${brandName}`,
+      q: brandName,
       country: 'us',
       language: 'en',
       page: '1',
@@ -95,7 +100,7 @@ async function searchDealsForBrand(brandName) {
 
   // Use brand-specific search query if defined
   if (BRAND_SEARCH_OVERRIDES[brandName]) {
-    options.params.q = `deals ${BRAND_SEARCH_OVERRIDES[brandName]}`;
+    options.params.q = BRAND_SEARCH_OVERRIDES[brandName];
   }
 
   try {
@@ -103,6 +108,22 @@ async function searchDealsForBrand(brandName) {
     const response = await axios.request(options);
     const products = response.data?.data?.products || [];
     console.log(`   Found ${products.length} products`);
+
+    // ── TEMPORARY DEBUG LOGGING ──────────────────────────────────
+    // Dumps the raw shape of the first product so we can see exactly
+    // which field holds the real retailer URL. Remove once confirmed.
+    if (products.length > 0 && brandName === 'Nike') {
+      const p = products[0];
+      console.log('🐛 DEBUG — first product top-level keys:', Object.keys(p));
+      console.log('🐛 DEBUG — product.offer:', JSON.stringify(p.offer, null, 2));
+      console.log('🐛 DEBUG — product.offers:', JSON.stringify(p.offers, null, 2));
+      console.log('🐛 DEBUG — product_page_url:', p.product_page_url);
+      console.log('🐛 DEBUG — offer_page_url (top-level):', p.offer_page_url);
+      console.log('🐛 DEBUG — store_page_url:', p.store_page_url);
+      console.log('🐛 DEBUG — FULL FIRST PRODUCT:', JSON.stringify(p, null, 2));
+    }
+    // ── END DEBUG LOGGING ─────────────────────────────────────────
+
     return products;
   } catch (error) {
     console.error(`   ERROR: ${error.message}`);
@@ -198,8 +219,12 @@ function normalizeDeals(products, brandName) {
   for (const product of products) {
     if (!product.product_title) continue;
 
+    // /search endpoint: the offer object holds the direct retailer URL, price, and on_sale flag
+    // Skip products with no offer (no retailer is selling it)
+    if (!product.offer) continue;
+
     const titleLower = (product.product_title || '').toLowerCase();
-    const retailerLower = (product.store_name || '').toLowerCase();
+    const retailerLower = (product.offer.store_name || '').toLowerCase();
     const combinedText = `${titleLower} ${retailerLower}`;
 
     // Reject if any blocklist word appears in the product title
@@ -239,46 +264,31 @@ function normalizeDeals(products, brandName) {
         continue;
       }
     }
-    
-    // ── Find the best on-sale offer ─────────────────────────────
-    // The direct retailer URL lives inside product.offers[].offer_page_url
-    // product.product_page_url is ALWAYS a Google Shopping URL — never use it
-    // Find the first offer that is on sale and has a direct retailer URL
-    const onSaleOffer = (product.offers || []).find(o => o.on_sale && o.offer_page_url);
-    const bestOffer = onSaleOffer || (product.offers || [])[0];
 
-    // Skip if no offer with a direct retailer link exists
-    const link = bestOffer?.offer_page_url || null;
+    // Only include products that are actually on sale
+    if (!product.offer.on_sale) continue;
+
+    // product.offer.offer_page_url is the REAL direct retailer link (nike.com, target.com, etc.)
+    // This is only available from the /search endpoint — the /deals endpoint only gives
+    // google.com/aclk redirect URLs that land on Google Shopping.
+    const link = product.offer.offer_page_url;
     if (!link) continue;
 
-    // Skip if neither the product nor the best offer is marked on sale
-    if (!product.on_sale && !bestOffer?.on_sale) continue;
-
-    // Use offer-level price data when available (more accurate), fall back to product-level
-    const currentPrice = parsePrice(bestOffer?.price || product.price);
+    const currentPrice = parsePrice(product.offer.price);
     if (!currentPrice || currentPrice < 1) continue;
 
-    // Use the API's pre-calculated discount percent if available
-    // Otherwise calculate from prices
-    let discountPercent;
-    if (bestOffer?.percent_off) {
-      // percent_off comes as "16% off" — extract the number
-      discountPercent = parseInt(bestOffer.percent_off);
-    } else if (product.discount_percent) {
-      discountPercent = parseInt(product.discount_percent);
-    } else {
-      const calcOriginal = parsePrice(bestOffer?.original_price || product.original_price) || currentPrice * 1.25;
-      if (!calcOriginal || calcOriginal <= currentPrice) continue;
-      discountPercent = Math.round(((calcOriginal - currentPrice) / calcOriginal) * 100);
-    }
+    const REQUIRE_VERIFIED_PRICE = false;
+    const originalPrice = REQUIRE_VERIFIED_PRICE
+      ? parsePrice(product.offer.original_price)
+      : (parsePrice(product.offer.original_price) || currentPrice * 1.25);
+
+    if (!originalPrice || originalPrice <= currentPrice) continue;
+
+    const savings = originalPrice - currentPrice;
+    const discountPercent = Math.round((savings / originalPrice) * 100);
 
     if (discountPercent < 10) continue;
 
-    const originalPrice = parsePrice(bestOffer?.original_price || product.original_price)
-      || Math.round(currentPrice / (1 - discountPercent / 100) * 100) / 100;
-
-    const retailerName = bestOffer?.store_name || product.store_name || 'Online';
-    
     const cleanBrand = brandName.toLowerCase().replace(/[^a-z0-9]/g, '');
     const cleanTitle = product.product_title.toLowerCase().replace(/[^a-z0-9]/g, '').substring(0, 40);
     const uniqueId = `${cleanBrand}-${cleanTitle}-${Math.round(currentPrice * 100)}`;
@@ -286,13 +296,13 @@ function normalizeDeals(products, brandName) {
     deals.push({
       id: uniqueId,
       brand: brandName,
-      product: bestOffer?.offer_title || product.product_title,
+      product: product.product_title,
       salePrice: Math.round(currentPrice * 100) / 100,
       originalPrice: Math.round(originalPrice * 100) / 100,
       discount: `${discountPercent}%`,
       link: link,
       image: product.product_photos?.[0] || 'https://images.unsplash.com/photo-1523275335684-37898b6baf30',
-      retailer: retailerName,
+      retailer: product.offer.store_name || 'Online',
       rating: product.product_rating || null,
       reviewCount: product.product_num_reviews || null,
       gender: detectGender(product.product_title, brandName),
