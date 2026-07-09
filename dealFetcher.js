@@ -74,12 +74,37 @@ const BRAND_RELEVANCE_REQUIRED = {
   'Costa':   ['costa del mar', 'costa sunglasses', 'costa'],
 };
 
+// How many top on-sale candidates per brand to fetch full offer details for.
+// This endpoint requires a SECOND API call per product to get the real
+// retailer link, so we cap it to keep API usage and runtime manageable.
+const OFFERS_TO_FETCH_PER_BRAND = 3;
+
+// Marketplace/reseller stores excluded from deals. These are peer-to-peer or
+// auction-style platforms where "sale" pricing is inconsistent, inventory is
+// single-unit, and the seller isn't an authorized retailer — not a good fit
+// for a brand-trust-based deal tracker. Add/remove names as needed.
+const MARKETPLACE_RESELLER_BLOCKLIST = [
+  'ebay', 'poshmark', 'mercari', 'stockx', 'goat', 'depop', 'thredup', 'grailed'
+];
+
+// Optional safety valve for testing: set TEST_BRAND_LIMIT in Railway's
+// environment variables (e.g. "5") to only process the first N brands.
+// Remove the env var (or set to 0) to run the full brand list normally.
+function getActiveBrandList() {
+  const limit = parseInt(process.env.TEST_BRAND_LIMIT || '0', 10);
+  if (limit > 0) {
+    console.log(`⚠️  TEST MODE: only processing first ${limit} brands (TEST_BRAND_LIMIT is set)`);
+    return PRIORITY_BRANDS.slice(0, limit);
+  }
+  return PRIORITY_BRANDS;
+}
+
 async function searchDealsForBrand(brandName) {
-  // NOTE: We use /search NOT /deals.
-  // The /deals endpoint only returns google.com/aclk redirect URLs which land on
-  // Google Shopping — not the actual retailer. The /search endpoint returns
-  // product.offer.offer_page_url which is the real direct retailer URL (nike.com, etc).
-  // We filter for on-sale items inside normalizeDeals via product.offer.on_sale.
+  // NOTE: /search only returns a lightweight summary per product — it does
+  // NOT include a direct retailer URL. product_page_url here is ALWAYS a
+  // Google Shopping search page, never a real store link.
+  // We use it only to find candidate on-sale products and their product_id,
+  // then fetch real offers separately via /product-details.
   const options = {
     method: 'GET',
     url: `https://${process.env.RAPIDAPI_HOST}/search`,
@@ -108,22 +133,6 @@ async function searchDealsForBrand(brandName) {
     const response = await axios.request(options);
     const products = response.data?.data?.products || [];
     console.log(`   Found ${products.length} products`);
-
-    // ── TEMPORARY DEBUG LOGGING ──────────────────────────────────
-    // Dumps the raw shape of the first product so we can see exactly
-    // which field holds the real retailer URL. Remove once confirmed.
-    if (products.length > 0 && brandName === 'Nike') {
-      const p = products[0];
-      console.log('🐛 DEBUG — first product top-level keys:', Object.keys(p));
-      console.log('🐛 DEBUG — product.offer:', JSON.stringify(p.offer, null, 2));
-      console.log('🐛 DEBUG — product.offers:', JSON.stringify(p.offers, null, 2));
-      console.log('🐛 DEBUG — product_page_url:', p.product_page_url);
-      console.log('🐛 DEBUG — offer_page_url (top-level):', p.offer_page_url);
-      console.log('🐛 DEBUG — store_page_url:', p.store_page_url);
-      console.log('🐛 DEBUG — FULL FIRST PRODUCT:', JSON.stringify(p, null, 2));
-    }
-    // ── END DEBUG LOGGING ─────────────────────────────────────────
-
     return products;
   } catch (error) {
     console.error(`   ERROR: ${error.message}`);
@@ -131,11 +140,53 @@ async function searchDealsForBrand(brandName) {
   }
 }
 
+// Fetches the real merchant offers (with direct retailer URLs) for a single
+// product using its product_id. This is the ONLY way to get a real store
+// link — /search never returns one.
+async function fetchOffersForProduct(productId, retryOn429 = true) {
+  const options = {
+    method: 'GET',
+    url: `https://${process.env.RAPIDAPI_HOST}/product-details`,
+    params: {
+      product_id: productId,
+      country: 'us',
+      language: 'en'
+    },
+    headers: {
+      'x-rapidapi-host': process.env.RAPIDAPI_HOST,
+      'x-rapidapi-key': process.env.RAPIDAPI_KEY
+    }
+  };
+
+  try {
+    const response = await axios.request(options);
+    return response.data?.data?.offers || [];
+  } catch (error) {
+    const status = error.response?.status;
+    if (status === 429 && retryOn429) {
+      // Rate limited — wait longer and try once more before giving up
+      console.log(`      ⏳ Rate limited on product-details, waiting 5s to retry...`);
+      await new Promise(resolve => setTimeout(resolve, 5000));
+      return fetchOffersForProduct(productId, false);
+    }
+    console.error(`      OFFERS ERROR for product ${productId}: ${error.message}`);
+    return [];
+  }
+}
+
+
 function parsePrice(priceString) {
   if (!priceString) return null;
   const cleaned = String(priceString).replace(/[$,]/g, '');
   const num = parseFloat(cleaned);
   return isNaN(num) ? null : num;
+}
+
+// Parses a percent-off string like "29% off" or "29% OFF" into 29
+function parsePercentOff(percentString) {
+  if (!percentString) return null;
+  const match = String(percentString).match(/(\d+)/);
+  return match ? parseInt(match[1]) : null;
 }
 
 // Brands that are TRULY unisex — only sell gender-neutral products
@@ -152,15 +203,12 @@ const UNISEX_BRANDS = [
 function detectGender(productTitle, brandName) {
   const title = productTitle.toLowerCase();
 
-  // If the brand is inherently unisex, return unisex immediately
   if (brandName && UNISEX_BRANDS.includes(brandName)) return 'unisex';
 
-  // Check women FIRST and broadly — before men, to avoid "women" being missed
   const womenKeywords = [
     "women's", "womens", "woman's", "womans", "women ", "women-",
     "ladies", "lady's", "ladys", "feminine", "female",
     "girls'", "girls ", "girl's", "girls-", "junior girls",
-    // Gendered product types
     "bra", "bralette", "bikini top", "tankini", "one-piece swimsuit",
     "dress", "skirt", "blouse", "camisole", "cami", "lingerie",
     "maternity", "nursing", "midi", "maxi skirt", "mini skirt",
@@ -171,7 +219,6 @@ function detectGender(productTitle, brandName) {
     "men's", "mens", "man's", "mans", "men ", "men-",
     "boys'", "boys ", "boy's", "boys-", "junior boys",
     "masculine", "male ",
-    // Gendered product types
     "beard", "necktie", "bow tie", "cufflinks",
     "boxer", "brief for men", "jockstrap",
     "tuxedo", "suit jacket for men"
@@ -188,70 +235,49 @@ function detectGender(productTitle, brandName) {
     "all genders", "everyone", "adult "
   ];
 
-  // Check for explicit unisex first
   if (unisexKeywords.some(kw => title.includes(kw))) return 'unisex';
 
-  // Check kids (separate from boys/girls)
   if (kidsKeywords.some(kw => title.includes(kw))) {
-    // Try to determine if boys or girls kids
     if (womenKeywords.some(kw => title.includes(kw))) return 'girls';
     if (menKeywords.some(kw => title.includes(kw))) return 'boys';
-    return 'kids'; // generic kids — shown under boys AND girls filters
+    return 'kids';
   }
 
-  // Check women before men to avoid partial matches
   if (womenKeywords.some(kw => title.includes(kw))) return 'women';
   if (menKeywords.some(kw => title.includes(kw))) return 'men';
 
-  // Return null for truly untagged items — frontend will show these
-  // only when NO gender filter is active, not under all filters
   return null;
 }
 
-function normalizeDeals(products, brandName) {
-  console.log(`📝 Normalizing ${products.length} products for ${brandName}...`);
-  
-  const deals = [];
-  
+// STEP 1 of normalization: filter the /search results down to a short list
+// of relevant, on-sale candidates worth spending a second API call on.
+function filterCandidateProducts(products, brandName) {
   const blocklist = BRAND_BLOCKLIST[brandName] || [];
   const relevanceRequired = BRAND_RELEVANCE_REQUIRED[brandName] || [];
 
+  const AMBIGUOUS_BRANDS = ['Bubble', 'Clarks', 'Lucky', 'Reef', 'Lush', 'Vince', 'Theory', 'Mango'];
+  const TRUSTED_BRANDS = [
+    'Lululemon', 'Yeti', 'Patagonia', 'The North Face', 'Nike', 'Adidas', 'Puma',
+    'Alo', 'Vuori', 'Gymshark', 'Athleta', 'Sweaty Betty', 'Outdoor Voices',
+    'Mammut', 'Salomon', 'Hoka', 'On Running', 'Allbirds', 'Veja',
+    'BIRKENSTOCK', 'Teva', 'UGG', 'Crocs', 'Converse', 'Vans',
+    'Polo Ralph Lauren', 'Tommy Hilfiger', 'Calvin Klein', 'Lacoste',
+    'Vineyard Vines', 'Peter Millar', 'Tommy Bahama', 'TravisMatthew',
+    'Rhone', 'Mac Weldon', 'Bonobos', 'Untuckit',
+  ];
+
+  const candidates = [];
+
   for (const product of products) {
-    if (!product.product_title) continue;
+    if (!product.product_title || !product.product_id) continue;
 
-    // /search endpoint: the offer object holds the direct retailer URL, price, and on_sale flag
-    // Skip products with no offer (no retailer is selling it)
-    if (!product.offer) continue;
-
-    const titleLower = (product.product_title || '').toLowerCase();
-    const retailerLower = (product.offer.store_name || '').toLowerCase();
+    const titleLower = product.product_title.toLowerCase();
+    const retailerLower = (product.store_name || '').toLowerCase();
     const combinedText = `${titleLower} ${retailerLower}`;
 
-    // Reject if any blocklist word appears in the product title
-    if (blocklist.some(word => titleLower.includes(word))) {
-      console.log(`   ⛔ Blocked: "${product.product_title}" (matched blocklist)`);
-      continue;
-    }
+    if (blocklist.some(word => titleLower.includes(word))) continue;
 
-    // Reject if none of the required relevance keywords appear
-    if (relevanceRequired.length > 0 && !relevanceRequired.some(kw => combinedText.includes(kw))) {
-      console.log(`   ⛔ Rejected: "${product.product_title}" (failed relevance check)`);
-      continue;
-    }
-
-    // General relevance check — only apply to brands that are highly ambiguous
-    const AMBIGUOUS_BRANDS = ['Bubble', 'Clarks', 'Lucky', 'Reef', 'Lush', 'Vince', 'Theory', 'Mango'];
-
-    // TRUSTED_BRANDS: well-known brands whose products often don't include brand name in title
-    const TRUSTED_BRANDS = [
-      'Lululemon', 'Yeti', 'Patagonia', 'The North Face', 'Nike', 'Adidas', 'Puma',
-      'Alo', 'Vuori', 'Gymshark', 'Athleta', 'Sweaty Betty', 'Outdoor Voices',
-      'Mammut', 'Salomon', 'Hoka', 'On Running', 'Allbirds', 'Veja',
-      'BIRKENSTOCK', 'Teva', 'UGG', 'Crocs', 'Converse', 'Vans',
-      'Polo Ralph Lauren', 'Tommy Hilfiger', 'Calvin Klein', 'Lacoste',
-      'Vineyard Vines', 'Peter Millar', 'Tommy Bahama', 'TravisMatthew',
-      'Rhone', 'Mac Weldon', 'Bonobos', 'Untuckit',
-    ];
+    if (relevanceRequired.length > 0 && !relevanceRequired.some(kw => combinedText.includes(kw))) continue;
 
     if (!TRUSTED_BRANDS.includes(brandName) && relevanceRequired.length === 0 && AMBIGUOUS_BRANDS.includes(brandName)) {
       const brandWords = brandName.toLowerCase()
@@ -259,50 +285,101 @@ function normalizeDeals(products, brandName) {
         .split(' ')
         .filter(w => w.length > 2);
       const brandAppears = brandWords.some(word => combinedText.includes(word));
-      if (!brandAppears) {
-        console.log(`   ⛔ Rejected: "${product.product_title}" (brand name not found)`);
-        continue;
-      }
+      if (!brandAppears) continue;
     }
 
-    // Only include products that are actually on sale
-    if (!product.offer.on_sale) continue;
+    // Only care about products the /search summary already marks on-sale
+    if (!product.on_sale) continue;
 
-    // product.offer.offer_page_url is the REAL direct retailer link (nike.com, target.com, etc.)
-    // This is only available from the /search endpoint — the /deals endpoint only gives
-    // google.com/aclk redirect URLs that land on Google Shopping.
-    const link = product.offer.offer_page_url;
-    if (!link) continue;
+    const discountPercent = parsePercentOff(product.discount_percent);
+    if (!discountPercent || discountPercent < 10) continue;
 
-    const currentPrice = parsePrice(product.offer.price);
+    candidates.push({ product, discountPercent });
+  }
+
+  // Highest discount first, then cap to keep API usage bounded
+  candidates.sort((a, b) => b.discountPercent - a.discountPercent);
+  return candidates.slice(0, OFFERS_TO_FETCH_PER_BRAND).map(c => c.product);
+}
+
+// STEP 2 of normalization: for each candidate, fetch its real offers and
+// pick the best on-sale one with a direct retailer URL.
+async function normalizeDeals(products, brandName) {
+  console.log(`📝 Normalizing ${products.length} products for ${brandName}...`);
+
+  const candidates = filterCandidateProducts(products, brandName);
+  console.log(`   ${candidates.length} candidate(s) worth checking for real offers`);
+
+  const deals = [];
+
+  for (const product of candidates) {
+    const offers = await fetchOffersForProduct(product.product_id);
+
+    // Delay between per-product calls to stay under rate limits —
+    // we're making far more calls now than the old single-call approach.
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    if (!offers || offers.length === 0) continue;
+
+    // Exclude marketplace/reseller offers (eBay, Poshmark, StockX, etc.) —
+    // these aren't authorized retailers and their pricing isn't reliable
+    // "sale" pricing the way a brand's own site or an authorized reseller is.
+    const legitOffers = offers.filter(o => {
+      const store = (o.store_name || '').toLowerCase();
+      return o.offer_page_url && !MARKETPLACE_RESELLER_BLOCKLIST.some(bad => store.includes(bad));
+    });
+
+    if (legitOffers.length === 0) continue;
+
+    // Best offer selection, in priority order:
+    // 1. An offer the API itself flags as "Best price"
+    // 2. The lowest-priced on-sale offer
+    // 3. The lowest-priced offer overall (fallback, rare)
+    const onSaleOffers = legitOffers.filter(o => o.on_sale);
+    const badgedBest = legitOffers.find(o => (o.offer_badge || '').toLowerCase().includes('best price'));
+
+    let bestOffer;
+    if (badgedBest) {
+      bestOffer = badgedBest;
+    } else if (onSaleOffers.length > 0) {
+      bestOffer = onSaleOffers.reduce((lowest, o) => {
+        const p = parsePrice(o.price);
+        const lowestP = parsePrice(lowest.price);
+        return (p !== null && (lowestP === null || p < lowestP)) ? o : lowest;
+      });
+    } else {
+      continue; // no on-sale, non-badged offer — skip rather than guess
+    }
+
+    const currentPrice = parsePrice(bestOffer.price);
     if (!currentPrice || currentPrice < 1) continue;
 
-    const REQUIRE_VERIFIED_PRICE = false;
-    const originalPrice = REQUIRE_VERIFIED_PRICE
-      ? parsePrice(product.offer.original_price)
-      : (parsePrice(product.offer.original_price) || currentPrice * 1.25);
-
+    // Only trust a REAL original_price from the offer. If it's missing,
+    // we don't fabricate a discount — that would show users a fake number.
+    const originalPrice = parsePrice(bestOffer.original_price);
     if (!originalPrice || originalPrice <= currentPrice) continue;
 
-    const savings = originalPrice - currentPrice;
-    const discountPercent = Math.round((savings / originalPrice) * 100);
+    const discountPercent = parsePercentOff(bestOffer.percent_off)
+      || Math.round(((originalPrice - currentPrice) / originalPrice) * 100);
 
     if (discountPercent < 10) continue;
 
     const cleanBrand = brandName.toLowerCase().replace(/[^a-z0-9]/g, '');
     const cleanTitle = product.product_title.toLowerCase().replace(/[^a-z0-9]/g, '').substring(0, 40);
     const uniqueId = `${cleanBrand}-${cleanTitle}-${Math.round(currentPrice * 100)}`;
-    
+
     deals.push({
       id: uniqueId,
       brand: brandName,
+      // Always use the clean product-level title for display — offer_title
+      // is often a messy SKU string like "...Shoes in Black, Size: 8 | DZ4857-001"
       product: product.product_title,
       salePrice: Math.round(currentPrice * 100) / 100,
       originalPrice: Math.round(originalPrice * 100) / 100,
       discount: `${discountPercent}%`,
-      link: link,
+      link: bestOffer.offer_page_url,
       image: product.product_photos?.[0] || 'https://images.unsplash.com/photo-1523275335684-37898b6baf30',
-      retailer: product.offer.store_name || 'Online',
+      retailer: bestOffer.store_name || 'Online',
       rating: product.product_rating || null,
       reviewCount: product.product_num_reviews || null,
       gender: detectGender(product.product_title, brandName),
@@ -310,12 +387,12 @@ function normalizeDeals(products, brandName) {
       fetchedAt: new Date().toISOString()
     });
   }
-  
+
   deals.sort((a, b) => parseInt(b.discount) - parseInt(a.discount));
   const topDeals = deals.slice(0, 15);
-  
-  console.log(`   ✅ ${topDeals.length} valid deals with 10%+ discount`);
-  
+
+  console.log(`   ✅ ${topDeals.length} valid deals with real retailer links`);
+
   return topDeals;
 }
 
@@ -372,18 +449,18 @@ async function fetchAndStoreDeals() {
   await cleanOldDeals();
   console.log('');
 
+  const activeBrands = getActiveBrandList();
+
   let totalDeals = 0;
   let successfulBrands = 0;
 
-  // Process brands ONE AT A TIME with a delay between each
-  // This prevents hitting RapidAPI rate limits (429 errors)
-  for (let i = 0; i < PRIORITY_BRANDS.length; i++) {
-    const brandName = PRIORITY_BRANDS[i];
-    console.log(`📦 Processing brand ${i + 1}/${PRIORITY_BRANDS.length}: ${brandName}`);
+  for (let i = 0; i < activeBrands.length; i++) {
+    const brandName = activeBrands[i];
+    console.log(`📦 Processing brand ${i + 1}/${activeBrands.length}: ${brandName}`);
 
     try {
       const products = await searchDealsForBrand(brandName);
-      const deals = normalizeDeals(products, brandName);
+      const deals = await normalizeDeals(products, brandName);
 
       if (deals.length > 0) {
         await storeDealsInFirestore(deals, brandName);
@@ -394,8 +471,8 @@ async function fetchAndStoreDeals() {
       console.error(`❌ Failed: ${brandName} - ${error.message}`);
     }
 
-    // Wait 3 seconds between each brand to stay within RapidAPI rate limits
-    if (i < PRIORITY_BRANDS.length - 1) {
+    // Wait between brands to stay within RapidAPI rate limits
+    if (i < activeBrands.length - 1) {
       await new Promise(resolve => setTimeout(resolve, 3000));
     }
   }
@@ -405,21 +482,77 @@ async function fetchAndStoreDeals() {
   console.log('='.repeat(50));
   console.log(`✅ COMPLETE`);
   console.log(`   Deals: ${totalDeals}`);
-  console.log(`   Brands: ${successfulBrands}/${PRIORITY_BRANDS.length}`);
+  console.log(`   Brands: ${successfulBrands}/${activeBrands.length}`);
   console.log(`   Time: ${duration}s (${(duration / 60).toFixed(1)} minutes)`);
   console.log('='.repeat(50));
 
   return {
     totalDeals,
     successfulBrands,
-    failedBrands: PRIORITY_BRANDS.length - successfulBrands,
+    failedBrands: activeBrands.length - successfulBrands,
     duration: `${duration}s`,
     timestamp: new Date().toISOString()
   };
 }
 
+// ── Run guard ──────────────────────────────────────────────────
+// Prevents fetchAndStoreDeals from running more than once every
+// MIN_HOURS_BETWEEN_FETCHES hours, no matter what triggers it —
+// cron, a Railway restart, or a redeploy. This is what actually
+// enforces "every ~3 days" rather than relying on cron timing alone,
+// since Railway restarts (deploys, crashes, infra maintenance) can
+// otherwise trigger extra full-cost fetches outside the schedule.
+const MIN_HOURS_BETWEEN_FETCHES = 60; // 2.5 days — gives buffer so daily checks land on day 3
+
+async function shouldRunFetch() {
+  try {
+    const db = getFirestore();
+    const statusDoc = await db.collection('system').doc('fetch_status').get();
+    if (!statusDoc.exists) return true;
+
+    const lastCompletedAt = statusDoc.data().lastCompletedAt;
+    if (!lastCompletedAt) return true;
+
+    const hoursSince = (Date.now() - new Date(lastCompletedAt).getTime()) / (1000 * 60 * 60);
+    if (hoursSince < MIN_HOURS_BETWEEN_FETCHES) {
+      console.log(`⏭️  Skipping fetch — last one completed ${hoursSince.toFixed(1)}h ago (minimum: ${MIN_HOURS_BETWEEN_FETCHES}h)`);
+      return false;
+    }
+    return true;
+  } catch (error) {
+    console.error('Error checking fetch guard, allowing fetch to proceed:', error.message);
+    return true; // fail open — better to run than to silently never run due to a Firestore hiccup
+  }
+}
+
+async function markFetchCompleted() {
+  try {
+    const db = getFirestore();
+    await db.collection('system').doc('fetch_status').set({
+      lastCompletedAt: new Date().toISOString()
+    }, { merge: true });
+  } catch (error) {
+    console.error('Error marking fetch completed:', error.message);
+  }
+}
+
+// This is what cron.js and the startup block should call — it's the
+// guarded, budget-safe entry point. fetchAndStoreDeals() itself is left
+// unguarded and unchanged so manual-trigger.html and TEST_BRAND_LIMIT
+// testing can still force an immediate run when you genuinely want one.
+async function runScheduledFetch() {
+  const allowed = await shouldRunFetch();
+  if (!allowed) {
+    return { skipped: true, reason: 'ran too recently' };
+  }
+  const result = await fetchAndStoreDeals();
+  await markFetchCompleted();
+  return result;
+}
+
 module.exports = {
   fetchAndStoreDeals,
+  runScheduledFetch,
   searchDealsForBrand,
   normalizeDeals
 };
