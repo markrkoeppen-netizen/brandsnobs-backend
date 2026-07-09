@@ -2,7 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const cron = require('node-cron');
-const { fetchAndStoreDeals } = require('./dealFetcher');
+const { fetchAndStoreDeals, runScheduledFetch } = require('./dealFetcher');
 const { initializeFirebase } = require('./firebase');
 
 const app = express();
@@ -24,10 +24,13 @@ app.get('/health', (req, res) => {
   });
 });
 
-// Manual trigger endpoint (for testing)
+// Manual trigger endpoint (for testing) — intentionally UNGUARDED.
+// This is the "I know what I'm doing, run it now" button used by
+// manual-trigger.html. It always forces a real fetch regardless of
+// when the last one ran.
 app.post('/fetch-deals', async (req, res) => {
   try {
-    console.log('Manual deal fetch triggered');
+    console.log('Manual deal fetch triggered (unguarded — forces a real run)');
     const result = await fetchAndStoreDeals();
     res.json({ 
       success: true, 
@@ -62,13 +65,20 @@ app.get('/stats', async (req, res) => {
   }
 });
 
-// Schedule automatic updates once daily at 6 AM UTC
+// Schedule automatic updates — checks once daily at 6 AM UTC, but
+// runScheduledFetch() internally decides whether enough time has actually
+// passed (~2.5+ days per the guard in DealFetcher.js) before spending any
+// API calls. This is what enforces "every ~3 days" rather than daily.
 cron.schedule('0 6 * * *', async () => {
-  console.log('🔄 Running daily deal fetch at 6 AM UTC...');
-  console.log('Scheduled deal fetch started:', new Date().toISOString());
+  console.log('🔄 Daily cron check at 6 AM UTC...');
+  console.log('Cron check started:', new Date().toISOString());
   try {
-    await fetchAndStoreDeals();
-    console.log('✅ Daily deal fetch completed');
+    const result = await runScheduledFetch();
+    if (result.skipped) {
+      console.log('⏭️  Skipped — last fetch was too recent');
+    } else {
+      console.log('✅ Daily deal fetch completed:', result);
+    }
   } catch (error) {
     console.error('❌ Scheduled fetch error:', error);
   }
@@ -77,12 +87,21 @@ cron.schedule('0 6 * * *', async () => {
 // Start server
 app.listen(PORT, () => {
   console.log(`🚀 Brandsnobs backend running on port ${PORT}`);
-  console.log(`⏰ Cron job scheduled: Deal fetching runs daily at 6 AM UTC`);
+  console.log(`⏰ Cron check scheduled: daily at 6 AM UTC (actual fetch only every ~3 days)`);
   console.log(`🔥 Firebase project: ${process.env.FIREBASE_PROJECT_ID}`);
   
-  // Run initial fetch on startup
-  console.log('Running initial deal fetch...');
-  fetchAndStoreDeals()
-    .then(() => console.log('✅ Initial fetch completed'))
-    .catch(err => console.error('❌ Initial fetch failed:', err));
+  // Run a GUARDED check on startup — NOT an unconditional fetch.
+  // This is the fix for the bug where every Railway restart/redeploy
+  // silently triggered a full unbudgeted fetch. Now a restart will only
+  // trigger a real fetch if one is actually due (~3 days since the last one).
+  console.log('Checking on startup whether a fetch is due...');
+  runScheduledFetch()
+    .then((result) => {
+      if (result.skipped) {
+        console.log('⏭️  Startup check complete — skipped (ran too recently)');
+      } else {
+        console.log('✅ Startup fetch completed:', result);
+      }
+    })
+    .catch(err => console.error('❌ Startup fetch failed:', err));
 });
