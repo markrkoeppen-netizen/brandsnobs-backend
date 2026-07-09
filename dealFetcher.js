@@ -431,14 +431,77 @@ async function cleanOldDeals() {
       console.log('🗑️  No old deals to clean');
       return;
     }
+
+    // Firestore batches are capped at 500 operations — chunk deletes
+    // so a large backlog doesn't fail the whole operation.
+    const docs = oldDeals.docs;
+    const CHUNK_SIZE = 450; // margin under the 500 limit
+    let deletedCount = 0;
+
+    for (let i = 0; i < docs.length; i += CHUNK_SIZE) {
+      const chunk = docs.slice(i, i + CHUNK_SIZE);
+      const batch = db.batch();
+      chunk.forEach(doc => batch.delete(doc.ref));
+      await batch.commit();
+      deletedCount += chunk.length;
+    }
     
-    const batch = db.batch();
-    oldDeals.docs.forEach(doc => batch.delete(doc.ref));
-    await batch.commit();
-    
-    console.log(`🗑️  Cleaned ${oldDeals.size} old deals`);
+    console.log(`🗑️  Cleaned ${deletedCount} old deals`);
   } catch (error) {
     console.log('⚠️  Could not clean old deals:', error.message);
+  }
+}
+
+// ── Resume support ────────────────────────────────────────────
+// A full fetch now takes 40-60+ minutes. Any Railway restart (a deploy,
+// a manual restart, infra maintenance) sends SIGTERM and kills the
+// process mid-run. Without this, every interruption meant starting
+// over from brand 1, wasting whatever API calls were already spent.
+// This tracks progress in Firestore so an interrupted run resumes
+// instead of restarting.
+const RESUME_STALE_AFTER_HOURS = 24; // abandon very old partial runs, start fresh instead
+
+async function getResumeState() {
+  try {
+    const db = getFirestore();
+    const doc = await db.collection('system').doc('fetch_progress').get();
+    if (!doc.exists) return null;
+
+    const data = doc.data();
+    if (!data.runStartedAt || typeof data.lastCompletedBrandIndex !== 'number') return null;
+
+    const hoursSinceStart = (Date.now() - new Date(data.runStartedAt).getTime()) / (1000 * 60 * 60);
+    if (hoursSinceStart > RESUME_STALE_AFTER_HOURS) {
+      console.log(`   (found a stale partial run from ${hoursSinceStart.toFixed(1)}h ago — starting fresh instead of resuming)`);
+      return null;
+    }
+    return data;
+  } catch (error) {
+    console.error('Error checking resume state:', error.message);
+    return null;
+  }
+}
+
+async function saveProgress(runStartedAt, brandIndex, totalDeals, successfulBrands) {
+  try {
+    const db = getFirestore();
+    await db.collection('system').doc('fetch_progress').set({
+      runStartedAt,
+      lastCompletedBrandIndex: brandIndex,
+      totalDeals,
+      successfulBrands
+    });
+  } catch (error) {
+    console.error('Error saving progress:', error.message);
+  }
+}
+
+async function clearProgress() {
+  try {
+    const db = getFirestore();
+    await db.collection('system').doc('fetch_progress').delete();
+  } catch (error) {
+    console.error('Error clearing progress:', error.message);
   }
 }
 
@@ -446,15 +509,42 @@ async function fetchAndStoreDeals() {
   console.log('🚀 Starting deal fetch...\n');
   const startTime = Date.now();
 
-  await cleanOldDeals();
-  console.log('');
-
   const activeBrands = getActiveBrandList();
 
+  // Check for an interrupted previous run to resume instead of restarting
+  const resumeState = await getResumeState();
+
+  let startIndex = 0;
   let totalDeals = 0;
   let successfulBrands = 0;
+  let runStartedAt = new Date().toISOString();
 
-  for (let i = 0; i < activeBrands.length; i++) {
+  if (resumeState) {
+    startIndex = resumeState.lastCompletedBrandIndex + 1;
+    totalDeals = resumeState.totalDeals || 0;
+    successfulBrands = resumeState.successfulBrands || 0;
+    runStartedAt = resumeState.runStartedAt;
+    console.log(`▶️  Resuming interrupted run from brand ${startIndex + 1}/${activeBrands.length} (started ${runStartedAt})`);
+  } else {
+    // Only clean old deals at the start of a genuinely NEW run —
+    // not on every resume, to avoid redundant Firestore work.
+    await cleanOldDeals();
+    console.log('');
+  }
+
+  if (startIndex >= activeBrands.length) {
+    console.log('✅ Resumed run was already complete — nothing left to do');
+    await clearProgress();
+    return {
+      totalDeals,
+      successfulBrands,
+      failedBrands: activeBrands.length - successfulBrands,
+      duration: '0s',
+      timestamp: new Date().toISOString()
+    };
+  }
+
+  for (let i = startIndex; i < activeBrands.length; i++) {
     const brandName = activeBrands[i];
     console.log(`📦 Processing brand ${i + 1}/${activeBrands.length}: ${brandName}`);
 
@@ -471,11 +561,17 @@ async function fetchAndStoreDeals() {
       console.error(`❌ Failed: ${brandName} - ${error.message}`);
     }
 
+    // Save progress after every brand so an interruption can resume here
+    await saveProgress(runStartedAt, i, totalDeals, successfulBrands);
+
     // Wait between brands to stay within RapidAPI rate limits
     if (i < activeBrands.length - 1) {
       await new Promise(resolve => setTimeout(resolve, 3000));
     }
   }
+
+  // Full run completed — clear the resume marker so the next run starts fresh
+  await clearProgress();
 
   const duration = ((Date.now() - startTime) / 1000).toFixed(1);
 
