@@ -105,3 +105,16 @@ app.listen(PORT, () => {
     })
     .catch(err => console.error('❌ Startup fetch failed:', err));
 });
+
+// Log SIGTERM clearly instead of letting the process die silently.
+// Railway sends this whenever it stops a container — a new deploy taking
+// over, a manual restart, or infra maintenance. If a fetch was mid-run
+// when this happens, it will automatically resume from where it left off
+// the next time the app starts (see getResumeState in DealFetcher.js) —
+// so an interruption here is expected and safe, not a failure.
+process.on('SIGTERM', () => {
+  console.log('⚠️  SIGTERM received — Railway is stopping this container.');
+  console.log('    (Likely a new deploy taking over, a manual restart, or Railway maintenance.)');
+  console.log('    If a fetch was in progress, it will resume from where it left off on next startup.');
+  process.exit(0);
+});
