@@ -77,7 +77,7 @@ const BRAND_RELEVANCE_REQUIRED = {
 // How many top on-sale candidates per brand to fetch full offer details for.
 // This endpoint requires a SECOND API call per product to get the real
 // retailer link, so we cap it to keep API usage and runtime manageable.
-const OFFERS_TO_FETCH_PER_BRAND = 5;
+const OFFERS_TO_FETCH_PER_BRAND = 20;
 
 // Marketplace/reseller stores excluded from deals. These are peer-to-peer or
 // auction-style platforms where "sale" pricing is inconsistent, inventory is
@@ -392,7 +392,7 @@ async function normalizeDeals(products, brandName) {
   }
 
   deals.sort((a, b) => parseInt(b.discount) - parseInt(a.discount));
-  const topDeals = deals.slice(0, 15);
+  const topDeals = deals.slice(0, 20);
 
   console.log(`   ✅ ${topDeals.length} valid deals with real retailer links`);
 
@@ -601,7 +601,7 @@ async function fetchAndStoreDeals() {
 // enforces "every ~3 days" rather than relying on cron timing alone,
 // since Railway restarts (deploys, crashes, infra maintenance) can
 // otherwise trigger extra full-cost fetches outside the schedule.
-const MIN_HOURS_BETWEEN_FETCHES = 60; // 2.5 days — gives buffer so daily checks land on day 3
+const MIN_HOURS_BETWEEN_FETCHES = 23; // just under 24h so the daily cron check reliably triggers it
 
 async function shouldRunFetch() {
   try {
