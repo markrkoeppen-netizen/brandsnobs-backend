@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Brandsnobs Backend - Add Brand</title>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+        }
+        label {
+            display: block;
+            margin-bottom: 6px;
+            font-weight: 600;
+            color: #333;
+            font-size: 14px;
+        }
+        .hint {
+            font-weight: 400;
+            color: #888;
+            font-size: 12px;
+        }
+        input, select {
+            width: 100%;
+            padding: 12px;
+            font-size: 15px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            margin-bottom: 18px;
+            box-sizing: border-box;
+            font-family: inherit;
+        }
+        details {
+            margin-bottom: 18px;
+            border: 2px solid #eee;
+            border-radius: 8px;
+            padding: 12px 16px;
+        }
+        summary {
+            cursor: pointer;
+            font-weight: 600;
+            color: #4F46E5;
+            font-size: 14px;
+        }
+        button {
+            width: 100%;
+            padding: 15px;
+            font-size: 16px;
+            font-weight: 600;
+            background: #4F46E5;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        button:hover {
+            background: #4338CA;
+        }
+        button:disabled {
+            background: #9CA3AF;
+            cursor: not-allowed;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 8px;
+            display: none;
+        }
+        .result.success {
+            background: #D1FAE5;
+            border: 2px solid #10B981;
+            color: #065F46;
+            display: block;
+        }
+        .result.error {
+            background: #FEE2E2;
+            border: 2px solid #EF4444;
+            color: #991B1B;
+            display: block;
+        }
+        .brand-list {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 2px solid #eee;
+        }
+        .brand-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 1px solid #f0f0f0;
+            font-size: 14px;
+        }
+        .brand-item .name {
+            font-weight: 600;
+            color: #333;
+        }
+        .brand-item .meta {
+            color: #888;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🏷️ Add Brand</h1>
+        <p class="subtitle">Add a new brand to the custom catalog — no code changes needed</p>
+
+        <label for="apiUrl">Your Railway Backend URL <span class="hint">(same one from manual-trigger.html)</span></label>
+        <input
+            type="text"
+            id="apiUrl"
+            placeholder="https://brandsnobs-backend-production.up.railway.app"
+            value=""
+        />
+
+        <label for="brandName">Brand Name</label>
+        <input type="text" id="brandName" placeholder="e.g., Ten Thousand" />
+
+        <label for="collectionName">Collection <span class="hint">(which category group it belongs to, e.g. "Athletic & Sport")</span></label>
+        <input type="text" id="collectionName" placeholder="e.g., Athletic & Sport" />
+
+        <label for="category">Item Category <span class="hint">(Fashion, Footwear, Accessories, Jewelry, Cosmetics, Outdoor, Home, etc.)</span></label>
+        <input type="text" id="category" placeholder="e.g., Fashion" value="Fashion" />
+
+        <label for="domain">Website Domain <span class="hint">(used to fetch the logo — optional, we'll guess if left blank)</span></label>
+        <input type="text" id="domain" placeholder="e.g., tenthousand.cc" />
+
+        <details>
+            <summary>Advanced options (only needed for tricky/ambiguous brand names)</summary>
+            <label for="searchOverride" style="margin-top: 12px;">Search Query Override <span class="hint">(use if the brand name alone returns wrong results, e.g. "Costa" &rarr; "Costa Del Mar sunglasses")</span></label>
+            <input type="text" id="searchOverride" placeholder="e.g., Ten Thousand athletic training apparel" />
+
+            <label for="blocklistWords">Blocklist Words <span class="hint">(comma-separated words that should reject a result, e.g. "coffee, cafe")</span></label>
+            <input type="text" id="blocklistWords" placeholder="e.g., coffee, cafe, drink" />
+        </details>
+
+        <button id="addButton" onclick="addBrand()">Add Brand</button>
+
+        <div id="result" class="result"></div>
+
+        <div class="brand-list">
+            <h3 style="font-size: 15px; color: #333;">Recently Added Custom Brands</h3>
+            <div id="brandListContainer" style="color: #888; font-size: 14px;">Enter your backend URL above and brands will load here.</div>
+        </div>
+    </div>
+
+    <script>
+        const urlInput = document.getElementById('apiUrl');
+        const savedUrl = localStorage.getItem('backendUrl');
+        if (savedUrl) {
+            urlInput.value = savedUrl;
+            loadBrandList();
+        }
+
+        urlInput.addEventListener('change', () => {
+            localStorage.setItem('backendUrl', urlInput.value);
+            loadBrandList();
+        });
+
+        async function loadBrandList() {
+            const apiUrl = urlInput.value.trim();
+            const container = document.getElementById('brandListContainer');
+            if (!apiUrl) return;
+
+            try {
+                const response = await fetch(`${apiUrl}/custom-brands`);
+                const data = await response.json();
+                if (data.success && data.brands.length > 0) {
+                    container.innerHTML = data.brands.map(b => `
+                        <div class="brand-item">
+                            <span class="name">${b.name}</span>
+                            <span class="meta">${b.collectionName}</span>
+                        </div>
+                    `).join('');
+                } else if (data.success) {
+                    container.innerHTML = '<p style="color: #888;">No custom brands added yet.</p>';
+                }
+            } catch (error) {
+                container.innerHTML = '<p style="color: #EF4444;">Could not load brand list — check your backend URL.</p>';
+            }
+        }
+
+        async function addBrand() {
+            const apiUrl = urlInput.value.trim();
+            const resultDiv = document.getElementById('result');
+            const button = document.getElementById('addButton');
+
+            const name = document.getElementById('brandName').value.trim();
+            const collectionName = document.getElementById('collectionName').value.trim();
+            const category = document.getElementById('category').value.trim();
+            const domain = document.getElementById('domain').value.trim();
+            const searchOverride = document.getElementById('searchOverride').value.trim();
+            const blocklistWordsRaw = document.getElementById('blocklistWords').value.trim();
+            const blocklistWords = blocklistWordsRaw
+                ? blocklistWordsRaw.split(',').map(w => w.trim()).filter(Boolean)
+                : [];
+
+            if (!apiUrl) {
+                resultDiv.className = 'result error';
+                resultDiv.innerHTML = '❌ Please enter your Railway backend URL';
+                return;
+            }
+            if (!name || !collectionName) {
+                resultDiv.className = 'result error';
+                resultDiv.innerHTML = '❌ Brand name and collection are required';
+                return;
+            }
+
+            button.disabled = true;
+            button.textContent = 'Adding...';
+            resultDiv.className = 'result';
+            resultDiv.style.display = 'none';
+
+            try {
+                const response = await fetch(`${apiUrl}/add-brand`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        name, collectionName, category, domain,
+                        searchOverride: searchOverride || null,
+                        blocklistWords
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    resultDiv.className = 'result success';
+                    resultDiv.innerHTML = `✅ <strong>${name}</strong> added to the custom brand catalog!`;
+                    document.getElementById('brandName').value = '';
+                    document.getElementById('collectionName').value = '';
+                    document.getElementById('domain').value = '';
+                    document.getElementById('searchOverride').value = '';
+                    document.getElementById('blocklistWords').value = '';
+                    loadBrandList();
+                } else {
+                    throw new Error(data.error || 'Unknown error');
+                }
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.innerHTML = `❌ <strong>Error:</strong> ${error.message}`;
+            } finally {
+                button.disabled = false;
+                button.textContent = 'Add Brand';
+            }
+        }
+    </script>
+</body>
+</html>
