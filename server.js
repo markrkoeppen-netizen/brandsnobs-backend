@@ -65,6 +65,76 @@ app.get('/stats', async (req, res) => {
   }
 });
 
+// Add a brand to the custom brand catalog (used by add-brand.html).
+// This is completely separate from the existing hardcoded PRIORITY_BRANDS
+// list in DealFetcher.js and BRAND_COLLECTIONS in App.jsx — it writes to
+// its own Firestore collection, which those files will later be updated
+// to merge in alongside the existing brands. Adding a brand here does NOT
+// yet make it show up in the app until that merge step is done.
+app.post('/add-brand', async (req, res) => {
+  try {
+    const { name, collectionName, category, domain, searchOverride, blocklistWords, relevanceRequired } = req.body;
+
+    if (!name || !name.trim()) {
+      return res.status(400).json({ success: false, error: 'Brand name is required' });
+    }
+    if (!collectionName || !collectionName.trim()) {
+      return res.status(400).json({ success: false, error: 'Collection is required (e.g. "Athletic & Sport")' });
+    }
+
+    const admin = require('firebase-admin');
+    const db = admin.firestore();
+
+    // Slugify the name for a stable, duplicate-safe document ID
+    const slug = name.trim().toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/(^-|-$)/g, '');
+
+    if (!slug) {
+      return res.status(400).json({ success: false, error: 'Brand name must contain letters or numbers' });
+    }
+
+    const docRef = db.collection('custom_brands').doc(slug);
+    const existing = await docRef.get();
+    if (existing.exists) {
+      return res.status(409).json({ success: false, error: `"${name}" already exists in the custom brand catalog` });
+    }
+
+    const fallbackDomain = name.trim().toLowerCase().replace(/[^a-z0-9]/g, '') + '.com';
+
+    await docRef.set({
+      name: name.trim(),
+      collectionName: collectionName.trim(),
+      category: (category || 'Fashion').trim(),
+      domain: (domain && domain.trim()) || fallbackDomain,
+      searchOverride: (searchOverride && searchOverride.trim()) || null,
+      blocklistWords: Array.isArray(blocklistWords) ? blocklistWords.filter(Boolean) : [],
+      relevanceRequired: Array.isArray(relevanceRequired) ? relevanceRequired.filter(Boolean) : [],
+      addedAt: new Date().toISOString()
+    });
+
+    console.log(`✅ Added custom brand: ${name} (${collectionName})`);
+    res.json({ success: true, message: `${name} added to the custom brand catalog`, slug });
+  } catch (error) {
+    console.error('Add brand error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// List all custom brands (used by add-brand.html to show what's already added,
+// and will later be used by DealFetcher.js / App.jsx to merge them in)
+app.get('/custom-brands', async (req, res) => {
+  try {
+    const admin = require('firebase-admin');
+    const db = admin.firestore();
+    const snapshot = await db.collection('custom_brands').orderBy('addedAt', 'desc').get();
+    const brands = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    res.json({ success: true, brands });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Checks once daily at midnight UTC; runScheduledFetch() only spends API
 // calls if ~23+ hours have passed since the last completed fetch, which
 // keeps this to roughly a real 24-hour cadence.
