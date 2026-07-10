@@ -65,19 +65,18 @@ app.get('/stats', async (req, res) => {
   }
 });
 
-// Schedule automatic updates — checks once daily at 6 AM UTC, but
-// runScheduledFetch() internally decides whether enough time has actually
-// passed (~2.5+ days per the guard in DealFetcher.js) before spending any
-// API calls. This is what enforces "every ~3 days" rather than daily.
-cron.schedule('0 6 * * *', async () => {
-  console.log('🔄 Daily cron check at 6 AM UTC...');
+// Checks once daily at midnight UTC; runScheduledFetch() only spends API
+// calls if ~23+ hours have passed since the last completed fetch, which
+// keeps this to roughly a real 24-hour cadence.
+cron.schedule('0 0 * * *', async () => {
+  console.log('🔄 24-hour cron check...');
   console.log('Cron check started:', new Date().toISOString());
   try {
     const result = await runScheduledFetch();
     if (result.skipped) {
       console.log('⏭️  Skipped — last fetch was too recent');
     } else {
-      console.log('✅ Daily deal fetch completed:', result);
+      console.log('✅ Deal fetch completed:', result);
     }
   } catch (error) {
     console.error('❌ Scheduled fetch error:', error);
@@ -87,7 +86,7 @@ cron.schedule('0 6 * * *', async () => {
 // Start server
 app.listen(PORT, () => {
   console.log(`🚀 Brandsnobs backend running on port ${PORT}`);
-  console.log(`⏰ Cron check scheduled: daily at 6 AM UTC (actual fetch only every ~3 days)`);
+  console.log(`⏰ Cron check scheduled: daily at midnight UTC (24-hour cadence)`);
   console.log(`🔥 Firebase project: ${process.env.FIREBASE_PROJECT_ID}`);
   
   // Run a GUARDED check on startup — NOT an unconditional fetch.
