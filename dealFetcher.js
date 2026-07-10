@@ -77,7 +77,7 @@ const BRAND_RELEVANCE_REQUIRED = {
 // How many top on-sale candidates per brand to fetch full offer details for.
 // This endpoint requires a SECOND API call per product to get the real
 // retailer link, so we cap it to keep API usage and runtime manageable.
-const OFFERS_TO_FETCH_PER_BRAND = 3;
+const OFFERS_TO_FETCH_PER_BRAND = 5;
 
 // Marketplace/reseller stores excluded from deals. These are peer-to-peer or
 // auction-style platforms where "sale" pricing is inconsistent, inventory is
@@ -100,16 +100,19 @@ function getActiveBrandList() {
 }
 
 async function searchDealsForBrand(brandName) {
-  // NOTE: /search only returns a lightweight summary per product — it does
-  // NOT include a direct retailer URL. product_page_url here is ALWAYS a
-  // Google Shopping search page, never a real store link.
-  // We use it only to find candidate on-sale products and their product_id,
-  // then fetch real offers separately via /product-details.
+  // NOTE: We use /deals for DISCOVERY (not /search). /deals is purpose-built
+  // to return already-on-sale items — nearly everything it returns is a
+  // genuine deal. /search is a general product search where only a small
+  // fraction of results happen to be on sale, which was starving us of
+  // candidates (e.g. Alo returning 0). /deals' own link field is still a
+  // useless Google Shopping URL, so we still fetch the real retailer link
+  // separately via /product-details using product_id — same as before,
+  // just swapping which endpoint feeds the candidate list.
   const options = {
     method: 'GET',
-    url: `https://${process.env.RAPIDAPI_HOST}/search`,
+    url: `https://${process.env.RAPIDAPI_HOST}/deals`,
     params: {
-      q: brandName,
+      q: `deals ${brandName}`,
       country: 'us',
       language: 'en',
       page: '1',
@@ -125,7 +128,7 @@ async function searchDealsForBrand(brandName) {
 
   // Use brand-specific search query if defined
   if (BRAND_SEARCH_OVERRIDES[brandName]) {
-    options.params.q = BRAND_SEARCH_OVERRIDES[brandName];
+    options.params.q = `deals ${BRAND_SEARCH_OVERRIDES[brandName]}`;
   }
 
   try {
