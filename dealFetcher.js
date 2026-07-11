@@ -74,10 +74,14 @@ const BRAND_RELEVANCE_REQUIRED = {
   'Costa':   ['costa del mar', 'costa sunglasses', 'costa'],
 };
 
-// How many top on-sale candidates per brand to fetch full offer details for.
-// This endpoint requires a SECOND API call per product to get the real
-// retailer link, so we cap it to keep API usage and runtime manageable.
-const OFFERS_TO_FETCH_PER_BRAND = 20;
+// ── Tiered per-brand depth ────────────────────────────────────
+// Checking every one of the 20 candidates per product costs a real API call.
+// Rather than spending that budget uniformly across all 158 brands (most of
+// which nobody may be following), brands actually followed by at least one
+// user get checked deeply; brands nobody follows yet get a small baseline
+// check instead (so their page isn't totally empty), not zero.
+const FOLLOWED_BRAND_CAP = 20;
+const UNFOLLOWED_BRAND_CAP = 1;
 
 // Marketplace/reseller stores excluded from deals. These are peer-to-peer or
 // auction-style platforms where "sale" pricing is inconsistent, inventory is
@@ -97,6 +101,35 @@ function getActiveBrandList() {
     return PRIORITY_BRANDS.slice(0, limit);
   }
   return PRIORITY_BRANDS;
+}
+
+// Counts how many users currently follow each brand, by reading every user
+// document's `brands` array. This is a Firestore-only operation — it does
+// NOT call the RapidAPI product-search API, so it doesn't affect API budget.
+// If this fails for any reason, we fail safe: return an empty count map,
+// which means every brand falls back to the unfollowed (low-cost) tier
+// rather than crashing the whole fetch.
+async function getFollowedBrandCounts() {
+  try {
+    const db = getFirestore();
+    const usersSnapshot = await db.collection('users').get();
+    const counts = {};
+
+    usersSnapshot.forEach(doc => {
+      const data = doc.data();
+      const brands = data.brands || [];
+      brands.forEach(b => {
+        if (b && b.name) {
+          counts[b.name] = (counts[b.name] || 0) + 1;
+        }
+      });
+    });
+
+    return counts;
+  } catch (error) {
+    console.error('Error fetching followed-brand counts (falling back to unfollowed tier for all brands):', error.message);
+    return {};
+  }
 }
 
 async function searchDealsForBrand(brandName) {
@@ -254,7 +287,7 @@ function detectGender(productTitle, brandName) {
 
 // STEP 1 of normalization: filter the /search results down to a short list
 // of relevant, on-sale candidates worth spending a second API call on.
-function filterCandidateProducts(products, brandName) {
+function filterCandidateProducts(products, brandName, perBrandCap) {
   const blocklist = BRAND_BLOCKLIST[brandName] || [];
   const relevanceRequired = BRAND_RELEVANCE_REQUIRED[brandName] || [];
 
@@ -302,26 +335,46 @@ function filterCandidateProducts(products, brandName) {
 
   // Highest discount first, then cap to keep API usage bounded
   candidates.sort((a, b) => b.discountPercent - a.discountPercent);
-  return candidates.slice(0, OFFERS_TO_FETCH_PER_BRAND).map(c => c.product);
+  return candidates.slice(0, perBrandCap).map(c => c.product);
 }
 
 // STEP 2 of normalization: for each candidate, fetch its real offers and
 // pick the best on-sale one with a direct retailer URL.
-async function normalizeDeals(products, brandName) {
+async function normalizeDeals(products, brandName, perBrandCap) {
   console.log(`📝 Normalizing ${products.length} products for ${brandName}...`);
 
-  const candidates = filterCandidateProducts(products, brandName);
+  const candidates = filterCandidateProducts(products, brandName, perBrandCap);
   console.log(`   ${candidates.length} candidate(s) worth checking for real offers`);
 
   const deals = [];
 
-  for (const product of candidates) {
-    const offers = await fetchOffersForProduct(product.product_id);
+  // Fetch offer details in small concurrent batches instead of one at a time.
+  // Sequential fetching (with a delay after each) was the main cause of runs
+  // taking hours — we saw no 429/rate-limit errors even at full volume, so
+  // there's real room to parallelize safely. If 429s start appearing in the
+  // logs after this change, lower BATCH_SIZE back down.
+  const BATCH_SIZE = 4;
+  const productOfferPairs = [];
 
-    // Delay between per-product calls to stay under rate limits —
-    // we're making far more calls now than the old single-call approach.
-    await new Promise(resolve => setTimeout(resolve, 500));
+  for (let i = 0; i < candidates.length; i += BATCH_SIZE) {
+    const batch = candidates.slice(i, i + BATCH_SIZE);
+    const batchResults = await Promise.all(
+      batch.map(async (product) => {
+        const offers = await fetchOffersForProduct(product.product_id);
+        return { product, offers };
+      })
+    );
+    productOfferPairs.push(...batchResults);
 
+    // Brief pause between batches (not between every single call)
+    if (i + BATCH_SIZE < candidates.length) {
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+  }
+
+  // Process each fetched result — this part is pure local logic, no network
+  // calls, so it doesn't need to be batched/delayed at all.
+  for (const { product, offers } of productOfferPairs) {
     if (!offers || offers.length === 0) continue;
 
     // Exclude marketplace/reseller offers (eBay, Poshmark, StockX, etc.) —
@@ -514,6 +567,15 @@ async function fetchAndStoreDeals() {
 
   const activeBrands = getActiveBrandList();
 
+  // Fetch once per run (not per brand) — this is a Firestore read, not an
+  // API call, so it doesn't affect RapidAPI budget. Determines which brands
+  // get deep checking (FOLLOWED_BRAND_CAP) vs a light baseline check
+  // (UNFOLLOWED_BRAND_CAP). Falls back to empty (= everyone unfollowed-tier)
+  // if this fails for any reason, so a Firestore hiccup can't crash the run.
+  const followedCounts = await getFollowedBrandCounts();
+  const followedBrandNames = Object.keys(followedCounts).filter(name => followedCounts[name] > 0);
+  console.log(`📊 ${followedBrandNames.length} brand(s) are followed by at least one user — those get deeper checking this run\n`);
+
   // Check for an interrupted previous run to resume instead of restarting
   const resumeState = await getResumeState();
 
@@ -549,11 +611,13 @@ async function fetchAndStoreDeals() {
 
   for (let i = startIndex; i < activeBrands.length; i++) {
     const brandName = activeBrands[i];
-    console.log(`📦 Processing brand ${i + 1}/${activeBrands.length}: ${brandName}`);
+    const isFollowed = (followedCounts[brandName] || 0) > 0;
+    const perBrandCap = isFollowed ? FOLLOWED_BRAND_CAP : UNFOLLOWED_BRAND_CAP;
+    console.log(`📦 Processing brand ${i + 1}/${activeBrands.length}: ${brandName} (${isFollowed ? 'followed' : 'not yet followed'}, checking up to ${perBrandCap})`);
 
     try {
       const products = await searchDealsForBrand(brandName);
-      const deals = await normalizeDeals(products, brandName);
+      const deals = await normalizeDeals(products, brandName, perBrandCap);
 
       if (deals.length > 0) {
         await storeDealsInFirestore(deals, brandName);
@@ -601,7 +665,7 @@ async function fetchAndStoreDeals() {
 // enforces "every ~3 days" rather than relying on cron timing alone,
 // since Railway restarts (deploys, crashes, infra maintenance) can
 // otherwise trigger extra full-cost fetches outside the schedule.
-const MIN_HOURS_BETWEEN_FETCHES = 23; // just under 24h so the daily cron check reliably triggers it
+const MIN_HOURS_BETWEEN_FETCHES = 71; // just under 72h so the daily cron check reliably triggers it
 
 async function shouldRunFetch() {
   try {
