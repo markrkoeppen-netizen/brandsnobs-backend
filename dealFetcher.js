@@ -91,16 +91,59 @@ const MARKETPLACE_RESELLER_BLOCKLIST = [
   'ebay', 'poshmark', 'mercari', 'stockx', 'goat', 'depop', 'thredup', 'grailed'
 ];
 
+// Reads the custom_brands Firestore collection (populated by add-brand.html)
+// and returns the brand names to merge into the fetch. Also registers any
+// per-brand search override / blocklist / relevance data those custom
+// entries provide, by merging into the existing lookup objects — the rest
+// of the pipeline picks these up automatically, no other code needs to
+// change. Fails safe: a Firestore error here just means no custom brands
+// get merged in this run, not a crashed fetch.
+async function loadCustomBrands() {
+  try {
+    const db = getFirestore();
+    const snapshot = await db.collection('custom_brands').get();
+    const brandNames = [];
+
+    snapshot.forEach(doc => {
+      const data = doc.data();
+      if (!data.name) return;
+      brandNames.push(data.name);
+
+      if (data.searchOverride) {
+        BRAND_SEARCH_OVERRIDES[data.name] = data.searchOverride;
+      }
+      if (Array.isArray(data.blocklistWords) && data.blocklistWords.length > 0) {
+        BRAND_BLOCKLIST[data.name] = data.blocklistWords;
+      }
+      if (Array.isArray(data.relevanceRequired) && data.relevanceRequired.length > 0) {
+        BRAND_RELEVANCE_REQUIRED[data.name] = data.relevanceRequired;
+      }
+    });
+
+    return brandNames;
+  } catch (error) {
+    console.error('Error loading custom brands (continuing with hardcoded brand list only):', error.message);
+    return [];
+  }
+}
+
 // Optional safety valve for testing: set TEST_BRAND_LIMIT in Railway's
 // environment variables (e.g. "5") to only process the first N brands.
 // Remove the env var (or set to 0) to run the full brand list normally.
-function getActiveBrandList() {
+async function getActiveBrandList() {
+  const customBrands = await loadCustomBrands();
+  if (customBrands.length > 0) {
+    console.log(`📋 Merged in ${customBrands.length} custom brand(s): ${customBrands.join(', ')}`);
+  }
+
+  const allBrands = [...PRIORITY_BRANDS, ...customBrands];
+
   const limit = parseInt(process.env.TEST_BRAND_LIMIT || '0', 10);
   if (limit > 0) {
     console.log(`⚠️  TEST MODE: only processing first ${limit} brands (TEST_BRAND_LIMIT is set)`);
-    return PRIORITY_BRANDS.slice(0, limit);
+    return allBrands.slice(0, limit);
   }
-  return PRIORITY_BRANDS;
+  return allBrands;
 }
 
 // Counts how many users currently follow each brand, by reading every user
@@ -565,7 +608,7 @@ async function fetchAndStoreDeals() {
   console.log('🚀 Starting deal fetch...\n');
   const startTime = Date.now();
 
-  const activeBrands = getActiveBrandList();
+  const activeBrands = await getActiveBrandList();
 
   // Fetch once per run (not per brand) — this is a Firestore read, not an
   // API call, so it doesn't affect RapidAPI budget. Determines which brands
