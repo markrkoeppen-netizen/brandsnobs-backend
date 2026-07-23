@@ -81,7 +81,7 @@ const BRAND_RELEVANCE_REQUIRED = {
 // user get checked deeply; brands nobody follows yet get a small baseline
 // check instead (so their page isn't totally empty), not zero.
 const FOLLOWED_BRAND_CAP = 20;
-const UNFOLLOWED_BRAND_CAP = 1;
+const UNFOLLOWED_BRAND_CAP = 5;
 
 // Marketplace/reseller stores excluded from deals. These are peer-to-peer or
 // auction-style platforms where "sale" pricing is inconsistent, inventory is
