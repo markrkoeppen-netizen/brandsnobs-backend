@@ -135,40 +135,6 @@ app.get('/custom-brands', async (req, res) => {
   }
 });
 
-// Serves deals to the app over a plain HTTPS request instead of the app
-// talking to Firestore directly. This avoids a known compatibility issue
-// where Firestore's live-connection SDK can hang indefinitely inside
-// Capacitor's native iOS WebView (especially over cellular networks) —
-// a plain request/response like this doesn't have that problem.
-app.post('/api/deals', async (req, res) => {
-  try {
-    const { brands } = req.body;
-    if (!Array.isArray(brands) || brands.length === 0) {
-      return res.json({ success: true, deals: [] });
-    }
-
-    const admin = require('firebase-admin');
-    const db = admin.firestore();
-    const batchSize = 30;
-    let allDeals = [];
-
-    for (let i = 0; i < brands.length; i += batchSize) {
-      const batch = brands.slice(i, i + batchSize);
-      const snapshot = await db.collection('deals')
-        .where('brand', 'in', batch)
-        .orderBy('fetchedAt', 'desc')
-        .get();
-      const batchDeals = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      allDeals = [...allDeals, ...batchDeals];
-    }
-
-    res.json({ success: true, deals: allDeals });
-  } catch (error) {
-    console.error('Error in /api/deals:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
 // Checks once daily at midnight UTC; runScheduledFetch() only spends API
 // calls if ~23+ hours have passed since the last completed fetch, which
 // keeps this to roughly a real 24-hour cadence.
