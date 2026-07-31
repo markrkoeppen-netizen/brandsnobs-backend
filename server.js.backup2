@@ -169,44 +169,6 @@ app.post('/api/deals', async (req, res) => {
   }
 });
 
-// Sign-in/profile lookup, served over a plain HTTPS request instead of
-// the app talking to Firestore directly — same reasoning as /api/deals:
-// avoids the native iOS WebView's known issue with Firestore's own
-// connection method hanging, especially on cellular.
-app.post('/api/signin', async (req, res) => {
-  try {
-    const { email } = req.body;
-    if (!email || typeof email !== 'string') {
-      return res.status(400).json({ success: false, error: 'A valid email is required' });
-    }
-
-    const userEmail = email.toLowerCase().trim();
-    const admin = require('firebase-admin');
-    const db = admin.firestore();
-    const userDocRef = db.collection('users').doc(userEmail);
-    const userDoc = await userDocRef.get();
-
-    if (userDoc.exists) {
-      return res.json({ success: true, exists: true, data: userDoc.data() });
-    }
-
-    const newProfile = {
-      email: userEmail,
-      brands: [],
-      genderPreferences: [],
-      shoppingBag: [],
-      wishlist: [],
-      shippingProfile: {},
-      createdAt: new Date().toISOString()
-    };
-    await userDocRef.set(newProfile);
-    return res.json({ success: true, exists: false, data: newProfile });
-  } catch (error) {
-    console.error('Error in /api/signin:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
 // Checks once daily at midnight UTC; runScheduledFetch() only spends API
 // calls if ~23+ hours have passed since the last completed fetch, which
 // keeps this to roughly a real 24-hour cadence.
