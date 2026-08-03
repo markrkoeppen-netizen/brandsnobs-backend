@@ -135,35 +135,6 @@ app.get('/custom-brands', async (req, res) => {
   }
 });
 
-app.get('/api/trending-brands', async (req, res) => {
-  try {
-    const admin = require('firebase-admin');
-    const db = admin.firestore();
-
-    const usersSnapshot = await db.collection('users').get();
-    const followedCounts = {};
-
-    usersSnapshot.forEach(doc => {
-      const data = doc.data();
-      const brands = data.brands || [];
-      brands.forEach(brand => {
-        const name = brand.name || brand;
-        followedCounts[name] = (followedCounts[name] || 0) + 1;
-      });
-    });
-
-    const trending = Object.entries(followedCounts)
-      .map(([name, count]) => ({ name, followerCount: count }))
-      .sort((a, b) => b.followerCount - a.followerCount)
-      .slice(0, 10);
-
-    res.json({ success: true, trending });
-  } catch (error) {
-    console.error('Error in /api/trending-brands:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
 // Serves deals to the app over a plain HTTPS request instead of the app
 // talking to Firestore directly. This avoids a known compatibility issue
 // where Firestore's live-connection SDK can hang indefinitely inside
