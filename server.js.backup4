@@ -164,68 +164,6 @@ app.get('/api/trending-brands', async (req, res) => {
   }
 });
 
-app.post('/api/editorial-posts', async (req, res) => {
-  try {
-    const { slug, title, excerpt, content, season, heroImage } = req.body;
-    if (!slug || !title || !content) {
-      return res.status(400).json({ success: false, error: 'slug, title, and content are required' });
-    }
-
-    const admin = require('firebase-admin');
-    const db = admin.firestore();
-    const docRef = db.collection('editorial_posts').doc(slug);
-
-    const existing = await docRef.get();
-    if (existing.exists) {
-      return res.status(409).json({ success: false, error: `A post with slug "${slug}" already exists` });
-    }
-
-    await docRef.set({
-      slug,
-      title,
-      excerpt: excerpt || '',
-      content,
-      season: season || '',
-      heroImage: heroImage || '',
-      publishedAt: new Date().toISOString()
-    });
-
-    console.log(`✅ Published editorial post: ${title} (${slug})`);
-    res.json({ success: true, slug });
-  } catch (error) {
-    console.error('Error in POST /api/editorial-posts:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-app.get('/api/editorial-posts', async (req, res) => {
-  try {
-    const admin = require('firebase-admin');
-    const db = admin.firestore();
-    const snapshot = await db.collection('editorial_posts').orderBy('publishedAt', 'desc').get();
-    const posts = snapshot.docs.map(doc => doc.data());
-    res.json({ success: true, posts });
-  } catch (error) {
-    console.error('Error in GET /api/editorial-posts:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-app.get('/api/editorial-posts/:slug', async (req, res) => {
-  try {
-    const admin = require('firebase-admin');
-    const db = admin.firestore();
-    const doc = await db.collection('editorial_posts').doc(req.params.slug).get();
-    if (!doc.exists) {
-      return res.status(404).json({ success: false, error: 'Post not found' });
-    }
-    res.json({ success: true, post: doc.data() });
-  } catch (error) {
-    console.error('Error in GET /api/editorial-posts/:slug:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
 // Serves deals to the app over a plain HTTPS request instead of the app
 // talking to Firestore directly. This avoids a known compatibility issue
 // where Firestore's live-connection SDK can hang indefinitely inside
