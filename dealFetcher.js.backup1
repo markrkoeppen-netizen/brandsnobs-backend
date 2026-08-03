@@ -11,7 +11,7 @@ const PRIORITY_BRANDS = [
   'Everlane', 'Fear of God Essentials', 'Fendi', 'Feragamo', 'Free People', 
   'Gorjana', 'Goyard', 'Gucci', 'Gymshark', 'Havaianas', 'Hellstar', 'Hermès', 
   'Hoka', 'Hollister', 'J.Crew', 'Jimmy Choo', 'Justin Boots', 'Kate Spade', 'Kendra Scott', 'Kith', 
-  'Lacoste', 'LANEIGE', "Levi's", 'Louis Vuitton', 'Lucchese', 'Lucky', 'Lululemon', 
+  'Lacoste', 'LANEIGE', "Levi's", 'Levi Strauss', 'Louis Vuitton', 'Lucchese', 'Lucky', 'Lululemon', 
   'Lush', 'Mac Weldon', 'Madewell', 'Mammut', 'Marc Jacobs', 'Michael Kors', 'New Balance', 'Nike', 
   'Oakley', 'OluKai', 'On Running', 'OOFOS', 'Oscar de la Renta', 'Outdoor Voices', 'Panhandle Slim', 
   'Patagonia', 'Pelagic', 'Peter Millar', 'Polo Ralph Lauren', 'Poncho Outdoors', 'Prada', 'Puma', 
