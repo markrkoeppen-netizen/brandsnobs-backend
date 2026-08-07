@@ -226,27 +226,6 @@ app.get('/api/editorial-posts/:slug', async (req, res) => {
   }
 });
 
-app.post('/api/delete-account', async (req, res) => {
-  try {
-    const { email } = req.body;
-    if (!email || typeof email !== 'string') {
-      return res.status(400).json({ success: false, error: 'A valid email is required' });
-    }
-
-    const userEmail = email.toLowerCase().trim();
-    const admin = require('firebase-admin');
-    const db = admin.firestore();
-
-    await db.collection('users').doc(userEmail).delete();
-
-    console.log(`✅ Deleted account: ${userEmail}`);
-    res.json({ success: true });
-  } catch (error) {
-    console.error('Error in /api/delete-account:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
 // Serves deals to the app over a plain HTTPS request instead of the app
 // talking to Firestore directly. This avoids a known compatibility issue
 // where Firestore's live-connection SDK can hang indefinitely inside
