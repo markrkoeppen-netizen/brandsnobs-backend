@@ -73,7 +73,6 @@ const BRAND_RELEVANCE_REQUIRED = {
   'Comfrt':  ['comfrt'],
   'Costa':   ['costa del mar', 'costa sunglasses', 'costa'],
   'Baseball Lifestyle 101': ['baseball lifestyle 101', 'bl101'],
-  'Dirty Mids': ['dirty mids'],
 };
 
 // ── Tiered per-brand depth ────────────────────────────────────
