@@ -43,7 +43,7 @@ const BRAND_SEARCH_OVERRIDES = {
   'Lush':            'Lush cosmetics beauty',
   'Trendia':         'Trendia fashion clothing',
   'Shade Critters':  'Shade Critters kids swimwear',
-  'Baseball Lifestyle 101': 'Baseball Lifestyle 101 brand baseball apparel',
+  'Baseball Lifestyle 101': 'Baseball Lifestyle 101 Dicks Sporting Goods apparel hat',
   'Dirty Mids':      'Dirty Mids sneakers footwear',
   'Dacor':           'Dacor appliances',
   'Mizzen+Main':     'Mizzen+Main dress shirts performance apparel',
@@ -72,7 +72,6 @@ const BRAND_BLOCKLIST = {
 const BRAND_RELEVANCE_REQUIRED = {
   'Comfrt':  ['comfrt'],
   'Costa':   ['costa del mar', 'costa sunglasses', 'costa'],
-  'Baseball Lifestyle 101': ['baseball lifestyle 101', 'bl101'],
 };
 
 // ── Tiered per-brand depth ────────────────────────────────────
