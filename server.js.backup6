@@ -247,32 +247,6 @@ app.post('/api/delete-account', async (req, res) => {
   }
 });
 
-app.post('/api/brand-recommendation', async (req, res) => {
-  try {
-    const { brandName, submitterEmail, userEmail } = req.body;
-    if (!brandName || !brandName.trim()) {
-      return res.status(400).json({ success: false, error: 'Brand name is required' });
-    }
-
-    const admin = require('firebase-admin');
-    const db = admin.firestore();
-
-    await db.collection('brand_recommendations').add({
-      brandName: brandName.trim(),
-      submitterEmail: submitterEmail || 'Not provided',
-      userEmail: userEmail || 'Anonymous',
-      submittedAt: new Date().toISOString(),
-      status: 'pending'
-    });
-
-    console.log(`✅ Brand recommendation saved: ${brandName}`);
-    res.json({ success: true });
-  } catch (error) {
-    console.error('Error in /api/brand-recommendation:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
 // Serves deals to the app over a plain HTTPS request instead of the app
 // talking to Firestore directly. This avoids a known compatibility issue
 // where Firestore's live-connection SDK can hang indefinitely inside
